@@ -11,8 +11,10 @@ type AuthMode = "raw" | "bearer";
 
 let tokenCache: CachedToken | null = null;
 let inflightLogin: Promise<string> | null = null;
-// Start raw (matches Dengage's docs curl); if that trips 401 we'll flip and remember.
-let authMode: AuthMode = "raw";
+// Default to Bearer - the diagnostics probe confirmed Dengage rejects the raw
+// token with 'www-authenticate: Guest' and accepts `Bearer <token>`. The
+// auto-detect below still flips to the other format on 401 as a safety net.
+let authMode: AuthMode = "bearer";
 
 const DEFAULT_TOKEN_TTL_MS = 25 * 60 * 1000;
 const SKEW_MS = 30 * 1000;

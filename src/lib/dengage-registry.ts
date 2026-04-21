@@ -75,27 +75,16 @@ export interface DengageEndpoint {
 
 const defaultRecipient = () => env.defaultDemoRecipient() || "demo@example.com";
 
-export const endpoints: DengageEndpoint[] = [
-  // 1) LIST TRANSACTIONAL TEMPLATES
-  {
-    id: "list-transactional-templates",
-    name: "List Transactional Email Templates",
-    description:
-      "Fetch all transactional email templates configured in your Dengage workspace. Use this to discover template IDs before sending.",
-    category: "messaging",
-    tags: ["email", "templates"],
-    docsUrl: "https://dev.dengage.com/reference/",
-    method: "GET",
-    path: "/transactional/email",
-    previewKind: "template-list",
-    defaultPayload: () => ({}),
-    notes: [
-      "This endpoint powers the template picker in the Send Transactional Email demo.",
-      "No body required - it's a GET.",
-    ],
-  },
+function isoDaysAgo(days: number): string {
+  const d = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+  return d.toISOString().replace(/\.\d{3}Z$/, "Z");
+}
+function isoNow(): string {
+  return new Date().toISOString().replace(/\.\d{3}Z$/, "Z");
+}
 
-  // 2) SEND TRANSACTIONAL EMAIL
+export const endpoints: DengageEndpoint[] = [
+  // 1) SEND TRANSACTIONAL EMAIL
   {
     id: "send-transactional-email",
     name: "Send Transactional Email",
@@ -119,14 +108,11 @@ export const endpoints: DengageEndpoint[] = [
         },
         {
           name: "templateId",
-          label: "Template",
-          type: "async-select",
+          label: "Template ID",
+          type: "text",
           required: true,
-          sourceEndpointId: "list-transactional-templates",
-          itemsPath: "data",
-          valueKey: "id",
-          labelKey: "name",
-          help: "Pulled live from your Dengage workspace.",
+          placeholder: "e.g. 12345",
+          help: "Copy the template ID from the Dengage UI (Transactional > Templates).",
         },
         {
           name: "fromName",
@@ -213,51 +199,43 @@ export const endpoints: DengageEndpoint[] = [
       params: { firstName: "Prospect" },
     }),
     notes: [
-      "Pick a templateId from your Dengage workspace - the dropdown fetches them live.",
+      "Grab the templateId from the Dengage UI under Transactional > Templates and paste it into the field.",
       "Keys under 'Personalization variables' are passed into your template's merge tags.",
       "If Dengage rejects a field name, open Developer view and adjust the JSON directly - the portal sends exactly what you see.",
     ],
   },
 
-  // 3) TRANSACTIONAL EMAIL REPORT
+  // 2) TRANSACTIONAL EMAIL REPORT
+  //    GET /transactional/email with BeginTime + EndTime returns the report
+  //    (emails sent in the window, with delivery / open / click metadata).
   {
     id: "transactional-email-report",
     name: "Transactional Email Report",
     description:
-      "Pull delivery, open, click, and bounce statistics for transactional emails sent in a time window.",
+      "Get the list of transactional emails sent in a time window, with delivery, open, click and bounce data per message.",
     category: "reports",
     tags: ["email", "transactional", "analytics"],
     docsUrl: "https://dev.dengage.com/reference/gettransactionalemailreport",
     method: "GET",
-    path: "/transactional/email/report",
+    path: "/transactional/email",
     previewKind: "delivery-report",
     form: {
       fields: [
         {
-          name: "startDate",
-          label: "Start date",
+          name: "BeginTime",
+          label: "Begin time",
           type: "text",
-          placeholder: "YYYY-MM-DD",
-          help: "Start of the reporting window.",
-          payloadPath: "startDate",
+          required: true,
+          placeholder: "YYYY-MM-DDTHH:mm:ssZ",
+          help: "Start of the reporting window. ISO 8601 UTC (e.g. 2026-04-14T00:00:00Z).",
         },
         {
-          name: "endDate",
-          label: "End date",
+          name: "EndTime",
+          label: "End time",
           type: "text",
-          placeholder: "YYYY-MM-DD",
-          help: "End of the reporting window.",
-          payloadPath: "endDate",
-        },
-        {
-          name: "templateId",
-          label: "Template filter (optional)",
-          type: "async-select",
-          sourceEndpointId: "list-transactional-templates",
-          itemsPath: "data",
-          valueKey: "id",
-          labelKey: "name",
-          help: "Restrict the report to a single template.",
+          required: true,
+          placeholder: "YYYY-MM-DDTHH:mm:ssZ",
+          help: "End of the reporting window. ISO 8601 UTC.",
         },
       ],
     },
@@ -265,32 +243,24 @@ export const endpoints: DengageEndpoint[] = [
       {
         id: "last-24h",
         name: "Last 24 hours",
-        values: (() => {
-          const now = new Date();
-          const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000);
-          return {
-            startDate: yesterday.toISOString().slice(0, 10),
-            endDate: now.toISOString().slice(0, 10),
-          };
-        })(),
+        values: { BeginTime: isoDaysAgo(1), EndTime: isoNow() },
       },
       {
         id: "last-7d",
         name: "Last 7 days",
-        values: (() => {
-          const now = new Date();
-          const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-          return {
-            startDate: weekAgo.toISOString().slice(0, 10),
-            endDate: now.toISOString().slice(0, 10),
-          };
-        })(),
+        values: { BeginTime: isoDaysAgo(7), EndTime: isoNow() },
+      },
+      {
+        id: "last-30d",
+        name: "Last 30 days",
+        values: { BeginTime: isoDaysAgo(30), EndTime: isoNow() },
       },
     ],
-    defaultPayload: () => ({}),
+    defaultPayload: () => ({ BeginTime: isoDaysAgo(1), EndTime: isoNow() }),
     notes: [
-      "The portal sends the date fields as query-string parameters on this GET request.",
-      "Exact field names may differ by workspace - check your Dengage docs if the server returns 400.",
+      "BeginTime and EndTime are sent as query-string parameters on this GET request.",
+      "Dengage returned '400: BeginTime must be filled' during diagnostics - this form enforces both.",
+      "If the report is empty, widen the time window with one of the scenarios above.",
     ],
   },
 ];
