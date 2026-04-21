@@ -106,6 +106,8 @@ export const endpoints: DengageEndpoint[] = [
     path: "/transactional/email",
     previewKind: "email",
     form: {
+      // Fields are flat on the UI for demo simplicity, but mapped into the
+      // nested JSON Dengage expects: { send: {...}, content: {...}, reporting: {...} }.
       fields: [
         {
           name: "to",
@@ -113,6 +115,7 @@ export const endpoints: DengageEndpoint[] = [
           type: "email",
           required: true,
           default: defaultRecipient(),
+          payloadPath: "send.to",
           help: "Where the email will be delivered. Uses DEFAULT_DEMO_RECIPIENT by default.",
         },
         {
@@ -120,7 +123,8 @@ export const endpoints: DengageEndpoint[] = [
           label: "Template ID",
           type: "text",
           required: true,
-          placeholder: "e.g. 12345",
+          placeholder: "e.g. 7bb82200-1cd0-4b4e-92fa-a19545d208b7",
+          payloadPath: "content.templateId",
           help: "Copy the template ID from the Dengage UI (Transactional > Templates).",
         },
         {
@@ -128,18 +132,21 @@ export const endpoints: DengageEndpoint[] = [
           label: "From name (optional)",
           type: "text",
           placeholder: "e.g. Acme Support",
+          payloadPath: "send.fromName",
         },
         {
           name: "fromEmail",
           label: "From email (optional)",
           type: "email",
           placeholder: "e.g. no-reply@acme.com",
+          payloadPath: "send.fromEmail",
         },
         {
           name: "subject",
           label: "Subject (optional override)",
           type: "text",
           placeholder: "Leave empty to use the template's subject",
+          payloadPath: "content.subject",
         },
         {
           name: "params",
@@ -147,6 +154,7 @@ export const endpoints: DengageEndpoint[] = [
           type: "key-value",
           keyLabel: "Variable name",
           valueLabel: "Value",
+          payloadPath: "content.params",
           help: "Key-value pairs passed to the template (e.g. firstName = Salil).",
           default: { firstName: "Salil" },
         },
@@ -222,18 +230,23 @@ export const endpoints: DengageEndpoint[] = [
       },
     ],
     defaultPayload: () => ({
-      to: defaultRecipient(),
-      templateId: "REPLACE_WITH_TEMPLATE_ID",
-      subject: "Hello from the Dengage showcase portal",
-      fromName: "Dengage Demo",
-      fromEmail: "no-reply@yourdomain.com",
-      params: { firstName: "Prospect" },
+      send: {
+        to: defaultRecipient(),
+        fromName: "Dengage Demo",
+        fromEmail: "no-reply@yourdomain.com",
+      },
+      content: {
+        templateId: "REPLACE_WITH_TEMPLATE_ID",
+        subject: "Hello from the Dengage showcase portal",
+        params: { firstName: "Prospect" },
+      },
       reporting: { trackOpen: true, trackClick: false },
     }),
     notes: [
-      "Grab the templateId from the Dengage UI under Transactional > Templates and paste it into the field.",
-      "Keys under 'Personalization variables' are passed into your template's merge tags.",
-      "If Dengage rejects a field name, open Developer view and adjust the JSON directly - the portal sends exactly what you see.",
+      "Body is nested: send{}, content{}, reporting{} at the top level. The Functional form is flat for demo clarity; the JSON shown in Developer view is what Dengage actually receives.",
+      "Grab the templateId from the Dengage UI under Transactional > Templates.",
+      "Keys under 'Personalization variables' land at content.params and are passed into your template's merge tags.",
+      "If Dengage rejects a field name (e.g. wants 'content.bodyParams' instead of 'content.params'), open Developer view and edit the JSON directly - the portal sends exactly what you see.",
     ],
   },
 
