@@ -93,28 +93,77 @@ Truly free forever (ARM VM + 1 reserved public IPv4). More setup:
    ```
 5. Give Dengage the VM's reserved public IP to whitelist.
 
+## The two demo views
+
+Every endpoint page has two tabs:
+
+- **Functional** — scenario chips, a friendly form generated from the
+  endpoint's `FormSchema`, and a live outcome renderer (email preview,
+  template list, delivery report, etc.) keyed by `previewKind`. This is what
+  non-technical prospects should see.
+- **Developer** — raw JSON payload editor, live request/response, HTTP status
+  and latency, copy-as-curl. This is what technical prospects should see.
+
+Both tabs share state — edit the form and the JSON updates; edit the JSON and
+switch to Developer mode without losing your work.
+
 ## Extending with more Dengage APIs
 
-Edit `src/lib/dengage-registry.ts` and append an entry:
+Edit `src/lib/dengage-registry.ts` and append an entry. Minimum (Developer
+view only):
 
 ```ts
 {
   id: "create-contact",
   name: "Create Contact",
   description: "Create or update a Dengage contact.",
+  category: "audience",
   docsUrl: "https://dev.dengage.com/reference/createcontact",
   method: "POST",
-  path: "/contact",                     // relative to DENGAGE_BASE_URL
-  defaultPayload: () => ({
-    contactKey: "demo@example.com",
-    firstName: "Demo",
-  }),
-  notes: ["Adjust fields to match your Dengage data model."],
+  path: "/contact",
+  defaultPayload: () => ({ contactKey: "demo@example.com", firstName: "Demo" }),
 }
 ```
 
-That's it — the new endpoint shows up on the dashboard and has a full live
-demo page. No other code changes required.
+Full (Functional view + Developer view):
+
+```ts
+{
+  id: "create-contact",
+  name: "Create Contact",
+  description: "Create or update a Dengage contact.",
+  category: "audience",
+  method: "POST",
+  path: "/contact",
+  form: {
+    fields: [
+      { name: "contactKey", label: "Contact key (email or ID)", type: "email", required: true },
+      { name: "firstName", label: "First name", type: "text" },
+      { name: "customAttributes", label: "Custom attributes", type: "key-value" },
+    ],
+  },
+  scenarios: [
+    { id: "basic", name: "Basic contact", values: { contactKey: "demo@example.com", firstName: "Demo" } },
+  ],
+  previewKind: "json",   // or write a new preview component for a richer view
+  defaultPayload: () => ({ contactKey: "demo@example.com", firstName: "Demo" }),
+}
+```
+
+To add a new preview renderer (e.g. an SMS bubble), add a component under
+`src/components/previews/`, register the kind in `src/lib/dengage-registry.ts`
+(`PreviewKind`), and wire it up in `src/components/previews/index.tsx`.
+
+## Supported form field types
+
+See `src/lib/form-schema.ts` for the full list. Current types:
+
+- `text`, `email`, `textarea`, `number`, `boolean`
+- `select` (static options)
+- `async-select` (populated live from another endpoint in the registry — this
+  is what pulls your Dengage templates into the send-email form)
+- `key-value` (for maps like personalization variables)
+- `json` (fallback free-form JSON editor)
 
 ## File map
 

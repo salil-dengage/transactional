@@ -285,3 +285,40 @@ textarea:focus {
 
 h1 { font-size: 24px; margin: 0 0 8px 0; }
 h2 { font-size: 18px; margin: 24px 0 8px 0; }
+
+.tabs {
+  display: flex;
+  gap: 2px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 16px;
+}
+.tab {
+  background: transparent;
+  color: var(--muted);
+  border: none;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+  padding: 10px 18px;
+  font-weight: 500;
+  cursor: pointer;
+  font-size: 14px;
+  margin-bottom: -1px;
+}
+.tab:hover {
+  background: transparent;
+  color: var(--text);
+}
+.tab.active {
+  color: var(--text);
+  border-bottom-color: var(--accent);
+  font-weight: 600;
+}
+
+code {
+  font-family: var(--mono);
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-size: 13px;
+}

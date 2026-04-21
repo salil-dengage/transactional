@@ -118,20 +118,38 @@ export async function callDengage(opts: {
   method: string;
   path: string;
   body?: unknown;
+  query?: Record<string, string | number | boolean | undefined>;
 }): Promise<DengageCallResult> {
-  const url = `${env.dengageBaseUrl()}${opts.path.startsWith("/") ? opts.path : `/${opts.path}`}`;
+  const base = env.dengageBaseUrl();
+  const pathPart = opts.path.startsWith("/") ? opts.path : `/${opts.path}`;
+  let url = `${base}${pathPart}`;
+  if (opts.query) {
+    const qs = new URLSearchParams();
+    for (const [k, v] of Object.entries(opts.query)) {
+      if (v !== undefined && v !== null && v !== "") qs.set(k, String(v));
+    }
+    const s = qs.toString();
+    if (s) url += (url.includes("?") ? "&" : "?") + s;
+  }
 
   async function doFetch(token: string): Promise<Response> {
-    return fetch(url, {
+    const headers: Record<string, string> = {
+      accept: "application/json",
+      // Dengage expects the raw access token in the Authorization header,
+      // NOT "Bearer <token>". Per the docs' sample curl:
+      //   --header 'Authorization: {$$.env.access_token}'
+      authorization: token,
+    };
+    const init: RequestInit = {
       method: opts.method,
-      headers: {
-        "content-type": "application/json",
-        accept: "application/json",
-        authorization: `Bearer ${token}`,
-      },
-      body: opts.body !== undefined ? JSON.stringify(opts.body) : undefined,
+      headers,
       cache: "no-store",
-    });
+    };
+    if (opts.body !== undefined && opts.method !== "GET" && opts.method !== "DELETE") {
+      headers["content-type"] = "application/json";
+      init.body = JSON.stringify(opts.body);
+    }
+    return fetch(url, init);
   }
 
   const started = Date.now();
