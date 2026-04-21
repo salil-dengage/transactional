@@ -46,6 +46,7 @@ export async function POST(
       method: endpoint.method,
       path: endpoint.path,
       baseUrl: endpoint.baseUrl,
+      anonymous: endpoint.anonymous,
       body: isBodylessMethod ? undefined : payload,
       query,
     });

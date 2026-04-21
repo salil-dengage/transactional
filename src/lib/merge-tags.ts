@@ -1,3 +1,5 @@
+import { env } from "./env";
+
 /**
  * Substitute {{name}} merge tags in a string using a flat map of values.
  * Unknown names are left as-is (easier to spot during demos than silently empty).
@@ -361,19 +363,56 @@ export function transformCustomEventPayload(flat: unknown): unknown {
   if (!flat || typeof flat !== "object" || Array.isArray(flat)) return flat;
   const f = flat as Record<string, unknown>;
 
-  const out: Record<string, unknown> = {};
-  routeTableIdentifier(out, f.tableId);
-  routeTableIdentifier(out, f.tableName);
+  // Event API body shape per Dengage docs:
+  //   {
+  //     accountId,                 // UUID from env (DENGAGE_ACCOUNT_ID)
+  //     eventTable,                // big-data table name
+  //     key,                       // NAME of the contact-key column (e.g. "key")
+  //     eventDetails: {            // all column name -> value pairs (incl. key col)
+  //       key: "<contact ID>", event_date: "...", ...,
+  //     },
+  //   }
+  // The endpoint is anonymous (no Bearer token); accountId replaces auth.
+
+  const eventTable =
+    (typeof f.tableName === "string" && f.tableName) ||
+    (typeof f.tableId === "string" && f.tableId) ||
+    "";
 
   const attrs = Array.isArray(f.attributes)
     ? (f.attributes as Array<{ name?: string; type?: string; value?: string }>)
     : [];
-  const filled = attrs.filter((a) => a && typeof a.name === "string" && a.name.length > 0);
-  if (filled.length > 0) {
-    out.columns = filled.map((a) => String(a.name));
-    out.rows = [filled.map((a) => coerceAttributeValue(a.type || "TEXT", String(a.value ?? "")))];
+  const eventDetails: Record<string, unknown> = {};
+  for (const a of attrs) {
+    if (!a || typeof a.name !== "string" || a.name.length === 0) continue;
+    eventDetails[a.name] = coerceAttributeValue(a.type || "TEXT", String(a.value ?? ""));
   }
 
-  return out;
+  // 'key' field names which column stores the contact identifier. Default to
+  // "key" since Dengage's big-data event tables conventionally have a "key"
+  // column (matches every scenario we ship). Let the rep override by
+  // including a pseudo-attribute named '__keyColumn' if they need a
+  // non-standard name - documented in the notes.
+  let keyColumnName = "key";
+  if (typeof f.keyColumn === "string" && f.keyColumn) keyColumnName = f.keyColumn;
+  else if (typeof eventDetails.__keyColumn === "string") {
+    keyColumnName = eventDetails.__keyColumn as string;
+    delete eventDetails.__keyColumn;
+  }
+
+  let accountId = "";
+  try {
+    accountId = env.dengageAccountId();
+  } catch {
+    // Let the server respond with the clear 'Missing DENGAGE_ACCOUNT_ID' text
+    // from env.required; body shape below stays consistent for diagnostics.
+  }
+
+  return {
+    accountId,
+    eventTable,
+    key: keyColumnName,
+    eventDetails,
+  };
 }
 

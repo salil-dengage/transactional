@@ -77,9 +77,12 @@ export interface DengageEndpoint {
   /** Path relative to baseUrl (or the default DENGAGE_BASE_URL). */
   path: string;
   /** Optional per-endpoint base URL. Use when an endpoint lives on a
-   *  different host than the default (e.g. app.dengage.com vs the REST API's
-   *  api.dengage.com/rest). */
+   *  different host than the default (e.g. event.dengage.com vs the REST
+   *  API's api.dengage.com/rest). */
   baseUrl?: string;
+  /** When true, skip Dengage /login and don't attach an Authorization
+   *  header. For explicitly anonymous endpoints (e.g. Event API). */
+  anonymous?: boolean;
 
   /**
    * Friendly form schema for the "Functional" view. If omitted, the endpoint
@@ -1410,20 +1413,22 @@ export const endpoints: DengageEndpoint[] = [
     ],
   },
 
-  // 7) SEND CUSTOM EVENT
-  //    Form: Table Name + attribute-list (Name | Type | Value).
-  //    Backed by UpsertData-Async V2 - functionally equivalent to the JS
-  //    SDK's sendDeviceEvent, but server-side via the documented REST path.
+  // 7) SEND CUSTOM EVENT (Event API)
+  //    Anonymous endpoint at event.dengage.com/api/web/event. Auth is the
+  //    accountId in the body (no Bearer token). Only writes to big-data
+  //    tables - regular/sendable tables should use UpsertData V2.
   {
     id: "send-custom-event",
     name: "Send Custom Event",
     description:
-      "Fire a single custom event into any big-data table linked to master_device. Reps show the event leave this portal; a quick tab over to Dengage Analytics > Data Space confirms it landed within seconds. Great demo of real-time event ingestion.",
+      "Fire a single event into a big-data table (page_view_events / shopping_cart_events / order_events / any custom table). No auth needed - Dengage identifies your account via DENGAGE_ACCOUNT_ID from env. Reps can tab over to Dengage Analytics > Data Space to show the row landing within seconds.",
     category: "events",
     tags: ["events", "data", "bigdata", "custom"],
-    docsUrl: "https://dev.dengage.com/reference/post_dataspace-async-upsert-v2",
+    docsUrl: "https://dev.dengage.com/reference/sendevent",
     method: "POST",
-    path: "/dataspace/async/upsert_v2",
+    baseUrl: "https://event.dengage.com",
+    path: "/api/web/event",
+    anonymous: true,
     previewKind: "async-upsert",
     form: {
       fields: [
@@ -1537,10 +1542,11 @@ export const endpoints: DengageEndpoint[] = [
     }),
     transformPayload: transformCustomEventPayload,
     notes: [
-      "This is a light, demo-friendly wrapper around UpsertData-Async V2 - so it posts to /dataspace/async/upsert_v2. Functionally equivalent to what the JS SDK's sendDeviceEvent call does, but kept flat + fast for a demo.",
-      "Table Name must refer to a big-data table already configured in your Dengage account. Unlike the SDK, the REST version does NOT auto-populate 'key' or 'event_date' - scenarios pre-fill both; keep or remove them per your table's schema.",
-      "Data types in the Type column drive on-the-wire JSON coercion: INTEGER / DECIMAL become numbers, BOOLEAN becomes true/false, everything else sends as a string.",
-      "Rate limit applies per target table (1 call/minute). Jobs are processed asynchronously - event should land in Dengage Analytics > Data Space within seconds.",
+      "Uses Dengage's Event API (event.dengage.com/api/web/event) - explicitly anonymous, no Bearer token. Auth is DENGAGE_ACCOUNT_ID from env, injected into the payload as accountId.",
+      "Target MUST be a big-data table in your Dengage account. Regular/sendable tables are rejected with 'Big data table should be filled with event api' - use UpsertData V2 for those.",
+      "The portal assumes the contact-key column is named 'key' (matches every big-data event table in your demo account). If your table uses a different column name, include a pseudo-attribute '__keyColumn' with the actual name and the portal will pick it up.",
+      "Data types: INTEGER / DECIMAL values are sent as JSON numbers, BOOLEAN as true/false, everything else as strings. Dengage does its own server-side validation.",
+      "Event should appear in Dengage Analytics > Data Space within seconds - no async job ID needed for this API.",
     ],
   },
 ];

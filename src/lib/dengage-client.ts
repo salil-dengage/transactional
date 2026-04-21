@@ -126,6 +126,10 @@ export async function callDengage(opts: {
   /** Optional override of the default base URL (useful for endpoints on
    *  app.dengage.com vs the default api.dengage.com/rest). */
   baseUrl?: string;
+  /** When true, skip /login and DON'T attach an Authorization header.
+   *  Used for Dengage endpoints that are explicitly anonymous
+   *  (e.g. event.dengage.com/api/web/event). */
+  anonymous?: boolean;
   body?: unknown;
   query?: Record<string, string | number | boolean | undefined>;
 }): Promise<DengageCallResult> {
@@ -141,11 +145,9 @@ export async function callDengage(opts: {
     if (s) url += (url.includes("?") ? "&" : "?") + s;
   }
 
-  async function doFetch(token: string, mode: AuthMode): Promise<Response> {
-    const headers: Record<string, string> = {
-      accept: "application/json",
-      authorization: authHeader(token, mode),
-    };
+  async function doFetch(token: string | null, mode: AuthMode): Promise<Response> {
+    const headers: Record<string, string> = { accept: "application/json" };
+    if (token !== null) headers.authorization = authHeader(token, mode);
     const init: RequestInit = { method: opts.method, headers, cache: "no-store" };
     if (opts.body !== undefined && opts.method !== "GET" && opts.method !== "DELETE") {
       headers["content-type"] = "application/json";
@@ -155,28 +157,37 @@ export async function callDengage(opts: {
   }
 
   const started = Date.now();
-  let token = await getToken();
-  let res = await doFetch(token, authMode);
+  let res: Response;
 
-  // If auth fails, try the other header format once. Dengage's public docs
-  // imply the raw token, but workspaces / versions vary; auto-detecting and
-  // caching the winning mode means a presales demo doesn't require a config
-  // change to get unblocked.
-  if (res.status === 401 || res.status === 403) {
-    const otherMode: AuthMode = authMode === "raw" ? "bearer" : "raw";
-    const alt = await doFetch(token, otherMode);
-    if (alt.status !== 401 && alt.status !== 403) {
-      authMode = otherMode;
-      res = alt;
-    } else {
-      // Still unauthorized with either format - try a fresh token on the original mode.
-      token = await getToken(true);
-      res = await doFetch(token, authMode);
-      if (res.status === 401 || res.status === 403) {
-        const alt2 = await doFetch(token, otherMode);
-        if (alt2.status !== 401 && alt2.status !== 403) {
-          authMode = otherMode;
-          res = alt2;
+  if (opts.anonymous) {
+    // No /login call, no Authorization header. Used for endpoints that are
+    // explicitly anonymous (e.g. Event API - auth is handled via accountId
+    // in the request body).
+    res = await doFetch(null, authMode);
+  } else {
+    let token = await getToken();
+    res = await doFetch(token, authMode);
+
+    // If auth fails, try the other header format once. Dengage's public docs
+    // imply the raw token, but workspaces / versions vary; auto-detecting and
+    // caching the winning mode means a presales demo doesn't require a config
+    // change to get unblocked.
+    if (res.status === 401 || res.status === 403) {
+      const otherMode: AuthMode = authMode === "raw" ? "bearer" : "raw";
+      const alt = await doFetch(token, otherMode);
+      if (alt.status !== 401 && alt.status !== 403) {
+        authMode = otherMode;
+        res = alt;
+      } else {
+        // Still unauthorized with either format - try a fresh token on the original mode.
+        token = await getToken(true);
+        res = await doFetch(token, authMode);
+        if (res.status === 401 || res.status === 403) {
+          const alt2 = await doFetch(token, otherMode);
+          if (alt2.status !== 401 && alt2.status !== 403) {
+            authMode = otherMode;
+            res = alt2;
+          }
         }
       }
     }
