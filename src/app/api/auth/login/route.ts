@@ -4,6 +4,19 @@ import { issueSessionToken, session } from "@/lib/session";
 
 export const runtime = "nodejs";
 
+// Helper: return a 303 redirect with a RELATIVE Location header.
+// Next.js standalone behind a reverse proxy (Fly, etc.) uses the container's
+// HOSTNAME env when constructing absolute URLs via NextResponse.redirect,
+// which produces Location: http://0.0.0.0:3000/... and breaks the browser.
+// A relative Location is resolved by the browser against the current URL,
+// so it always lands on the correct public host.
+function relativeRedirect(path: string): NextResponse {
+  return new NextResponse(null, {
+    status: 303,
+    headers: { Location: path },
+  });
+}
+
 export async function POST(req: NextRequest) {
   const form = await req.formData();
   const password = String(form.get("password") || "");
@@ -15,14 +28,13 @@ export async function POST(req: NextRequest) {
   const safeNext = next.startsWith("/") && !next.startsWith("//") ? next : "/dashboard";
 
   if (!ok) {
-    const url = new URL("/login", req.url);
-    url.searchParams.set("error", "1");
-    if (safeNext && safeNext !== "/dashboard") url.searchParams.set("next", safeNext);
-    return NextResponse.redirect(url, { status: 303 });
+    const qs = new URLSearchParams({ error: "1" });
+    if (safeNext && safeNext !== "/dashboard") qs.set("next", safeNext);
+    return relativeRedirect(`/login?${qs.toString()}`);
   }
 
   const token = issueSessionToken();
-  const res = NextResponse.redirect(new URL(safeNext, req.url), { status: 303 });
+  const res = relativeRedirect(safeNext);
   res.cookies.set(session.cookieName, token, {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",

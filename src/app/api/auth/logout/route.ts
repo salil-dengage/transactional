@@ -3,8 +3,9 @@ import { session } from "@/lib/session";
 
 export const runtime = "nodejs";
 
-export async function POST(req: NextRequest) {
-  const res = NextResponse.redirect(new URL("/login", req.url), { status: 303 });
+export async function POST(_req: NextRequest) {
+  // Relative Location so it resolves against the public host (see login route).
+  const res = new NextResponse(null, { status: 303, headers: { Location: "/login" } });
   res.cookies.set(session.cookieName, "", {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",
