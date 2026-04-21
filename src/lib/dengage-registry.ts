@@ -154,17 +154,19 @@ const demoHtml = {
 </table></td></tr></table></body></html>`,
 };
 
-// Admin-UI datetime format: "YYYY-MM-DDTHH:mm:ss" (no timezone suffix).
-// Used by app.dengage.com/api/getTransactionalEmailList.
-function dengageIsoStartOfDay(daysAgo: number): string {
-  const d = new Date(Date.now() - daysAgo * 24 * 60 * 60 * 1000);
+// Dengage DATETIME format per their public data-type spec: "YYYY-MM-DD HH:mm"
+// (UTC). NOT ISO 8601 - the T separator and Z suffix will be rejected.
+function dengageDateTime(d: Date): string {
   const pad = (n: number) => String(n).padStart(2, "0");
-  return `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())}T00:00:00`;
+  return `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())} ${pad(
+    d.getUTCHours(),
+  )}:${pad(d.getUTCMinutes())}`;
 }
-function dengageIsoEndOfDay(daysAgo: number): string {
-  const d = new Date(Date.now() - daysAgo * 24 * 60 * 60 * 1000);
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())}T23:59:59`;
+function dengageDateTimeDaysAgo(days: number): string {
+  return dengageDateTime(new Date(Date.now() - days * 24 * 60 * 60 * 1000));
+}
+function dengageDateTimeNow(): string {
+  return dengageDateTime(new Date());
 }
 
 export const endpoints: DengageEndpoint[] = [
@@ -556,135 +558,68 @@ export const endpoints: DengageEndpoint[] = [
     transformPayload: transformBulkPayload,
   },
 
-  // 2) TRANSACTIONAL EMAIL SEND LOGS
-  //    Admin-UI API powering the 'Analytics > Send Logs' page. POST to
-  //    app.dengage.com/api/getTransactionalEmailList with a JSON body.
-  //    Different base host than the REST API; handled via endpoint.baseUrl.
+  // 2) TRANSACTIONAL EMAIL REPORT
+  //    Public REST API: GET /transactional/email with BeginTime + EndTime.
+  //    Returns transactional sends in the window with delivery / open /
+  //    click metadata per message. Only uses documented endpoints -
+  //    app.dengage.com admin-UI APIs are intentionally NOT used in the
+  //    showcase portal.
   {
     id: "transactional-email-report",
-    name: "Transactional Email Send Logs",
+    name: "Transactional Email Report",
     description:
-      "List transactional emails sent in a time window with delivery, open, click and bounce data per message. Mirrors Dengage Analytics > Send Logs and accepts an optional recipient-email filter.",
+      "Get the list of transactional emails sent in a time window, with delivery, open, click and bounce data per message.",
     category: "reports",
-    tags: ["email", "transactional", "analytics", "admin-ui"],
+    tags: ["email", "transactional", "analytics"],
     docsUrl: "https://dev.dengage.com/reference/gettransactionalemailreport",
-    method: "POST",
-    baseUrl: "https://app.dengage.com",
-    path: "/api/getTransactionalEmailList",
+    method: "GET",
+    path: "/transactional/email",
     previewKind: "delivery-report",
     form: {
       fields: [
         {
-          name: "email",
-          label: "Recipient email (optional)",
-          type: "email",
-          placeholder: "Leave empty to list all sends in the window",
-          help: "Filter to sends delivered to a specific address.",
-        },
-        {
-          name: "startDate",
-          label: "Start date",
+          name: "BeginTime",
+          label: "Begin time",
           type: "text",
           required: true,
-          placeholder: "YYYY-MM-DDTHH:mm:ss",
-          help: "ISO-like datetime, no timezone suffix (e.g. 2026-04-21T00:00:00).",
+          placeholder: "YYYY-MM-DD HH:mm",
+          help: "Start of the reporting window. Dengage DATETIME format, UTC (e.g. 2026-04-14 00:00).",
         },
         {
-          name: "endDate",
-          label: "End date",
+          name: "EndTime",
+          label: "End time",
           type: "text",
           required: true,
-          placeholder: "YYYY-MM-DDTHH:mm:ss",
-        },
-        {
-          name: "tagId",
-          label: "Tag ID",
-          type: "number",
-          default: 0,
-          help: "0 = all tags. Set to a specific tag ID to filter.",
-        },
-        {
-          name: "limit",
-          label: "Limit",
-          type: "number",
-          default: 50,
-          help: "Max rows to return.",
-        },
-        {
-          name: "offset",
-          label: "Offset",
-          type: "number",
-          default: 0,
-          help: "Skip N rows (pagination).",
+          placeholder: "YYYY-MM-DD HH:mm",
+          help: "End of the reporting window. Dengage DATETIME format, UTC.",
         },
       ],
     },
     scenarios: [
       {
-        id: "today-salil",
-        name: "Today - to salil.gupta",
-        description: "Sends delivered to the default demo recipient today.",
-        values: {
-          email: defaultRecipient(),
-          startDate: dengageIsoStartOfDay(0),
-          endDate: dengageIsoEndOfDay(0),
-          tagId: 0,
-          limit: 50,
-          offset: 0,
-        },
+        id: "last-24h",
+        name: "Last 24 hours",
+        values: { BeginTime: dengageDateTimeDaysAgo(1), EndTime: dengageDateTimeNow() },
       },
       {
-        id: "today-all",
-        name: "Today - all recipients",
-        values: {
-          email: "",
-          startDate: dengageIsoStartOfDay(0),
-          endDate: dengageIsoEndOfDay(0),
-          tagId: 0,
-          limit: 50,
-          offset: 0,
-        },
-      },
-      {
-        id: "last-7d-all",
+        id: "last-7d",
         name: "Last 7 days",
-        values: {
-          email: "",
-          startDate: dengageIsoStartOfDay(7),
-          endDate: dengageIsoEndOfDay(0),
-          tagId: 0,
-          limit: 50,
-          offset: 0,
-        },
+        values: { BeginTime: dengageDateTimeDaysAgo(7), EndTime: dengageDateTimeNow() },
+      },
+      {
+        id: "last-30d",
+        name: "Last 30 days",
+        values: { BeginTime: dengageDateTimeDaysAgo(30), EndTime: dengageDateTimeNow() },
       },
     ],
     defaultPayload: () => ({
-      email: defaultRecipient(),
-      startDate: dengageIsoStartOfDay(0),
-      endDate: dengageIsoEndOfDay(0),
-      startTime: null,
-      endTime: null,
-      tagId: 0,
-      limit: 50,
-      offset: 0,
+      BeginTime: dengageDateTimeDaysAgo(1),
+      EndTime: dengageDateTimeNow(),
     }),
-    transformPayload: (flat) => {
-      if (!flat || typeof flat !== "object" || Array.isArray(flat)) return flat;
-      const f = flat as Record<string, unknown>;
-      const out: Record<string, unknown> = { ...f };
-      // The admin UI always sends startTime/endTime: null - include them so
-      // Dengage doesn't reject on unexpected missing fields.
-      if (out.startTime === undefined) out.startTime = null;
-      if (out.endTime === undefined) out.endTime = null;
-      // Coerce empty-string email to undefined so Dengage treats it as 'all'.
-      if (out.email === "" || out.email === undefined) delete out.email;
-      return out;
-    },
     notes: [
-      "This endpoint lives on app.dengage.com (Dengage's admin-UI API), not api.dengage.com/rest - the portal routes it to the right host automatically.",
-      "Auth uses the same Bearer token as the REST API. If you get 401/Guest, Dengage issued the admin-UI domain a different token and we'll need a separate login flow.",
-      "Dates are 'YYYY-MM-DDTHH:mm:ss' with no timezone suffix (note the T separator). Scenarios wire this up automatically.",
-      "tagId=0 means 'all tags'. limit/offset paginate.",
+      "BeginTime and EndTime are sent as query-string parameters on this GET request.",
+      "Dengage's DATETIME format is 'YYYY-MM-DD HH:mm' UTC - not ISO 8601.",
+      "Scope note: this report reflects whatever sends the REST API surfaces for your authenticated account. If a send is visible in the Dengage admin UI but not here, raise it with Dengage support - the portal only calls documented REST endpoints and doesn't reverse-engineer admin-UI APIs.",
     ],
   },
 ];
