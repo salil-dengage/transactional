@@ -118,9 +118,11 @@ export default function DemoClient({ endpoint }: { endpoint: EndpointProps }) {
     } catch {
       body = rawJson;
     }
+    // Prefer the URL that was actually sent (with query string) once we have one.
+    const url = result?.requestUrl || endpoint.fullUrl;
     const lines = [
       `curl --request ${endpoint.method} \\`,
-      `  --url ${endpoint.fullUrl} \\`,
+      `  --url '${url}' \\`,
       `  --header 'accept: application/json' \\`,
       `  --header 'authorization: YOUR_ACCESS_TOKEN' \\`,
     ];
@@ -324,8 +326,13 @@ function DeveloperView({
         </div>
         <div className="request-line" style={{ marginBottom: 10 }}>
           <span className={`method-tag method-${method}`}>{method}</span>
-          <span>{fullUrl}</span>
+          <span>{result?.requestUrl || fullUrl}</span>
         </div>
+        {result?.requestUrl && result.requestUrl !== fullUrl ? (
+          <div className="muted" style={{ fontSize: 12, marginTop: -6, marginBottom: 10 }}>
+            Full URL that was just sent to Dengage (including query-string parameters).
+          </div>
+        ) : null}
         {!bodyless ? (
           <>
             <textarea
