@@ -1,14 +1,27 @@
 # Fly.io deployment config.
-# First run:
-#   fly launch --copy-config --no-deploy
-#   fly secrets set DENGAGE_USERKEY=... DENGAGE_PASSWORD=... PORTAL_PASSWORD=... SESSION_SECRET=... DEFAULT_DEMO_RECIPIENT=...
-#   fly ips allocate-v4        # dedicated public IPv4 — this is the IP you give Dengage to whitelist
-#   fly deploy
+#
+# Recommended (CLI) path — the GitHub integration sometimes ignores the
+# existing fly.toml and tries to auto-detect:
+#
+#   1. fly launch --copy-config --no-deploy --name <pick-a-unique-name>
+#   2. fly secrets set \
+#        DENGAGE_USERKEY=... \
+#        DENGAGE_PASSWORD=... \
+#        PORTAL_PASSWORD=... \
+#        SESSION_SECRET=$(openssl rand -hex 32) \
+#        DEFAULT_DEMO_RECIPIENT=salil.gupta@dengage.com
+#   3. fly ips allocate-v4        # dedicated public IPv4 — whitelist this on Dengage
+#   4. fly deploy
+#
+# NOTE: change `app` below to something globally unique before your first
+# launch. Fly app names share one global namespace — if this one is taken,
+# deploys fail before anything is built.
 
 app = "dengage-api-showcase"
 primary_region = "iad"
 
 [build]
+  dockerfile = "Dockerfile"
 
 [env]
   NODE_ENV = "production"
@@ -20,6 +33,13 @@ primary_region = "iad"
   auto_stop_machines = "stop"
   auto_start_machines = true
   min_machines_running = 1
+
+  [[http_service.checks]]
+    interval = "30s"
+    timeout = "5s"
+    grace_period = "10s"
+    method = "GET"
+    path = "/api/health"
 
 [[vm]]
   cpu_kind = "shared"
