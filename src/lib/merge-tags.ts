@@ -124,3 +124,63 @@ export function transformBulkPayload(flat: unknown): unknown {
   };
 }
 
+/**
+ * Bulk upsert contacts transform: flat UI -> Dengage's nested body.
+ *
+ * Form is a single-contact form for demo clarity. It's mapped into:
+ *   {
+ *     columns: [...],           // auto-derived from filled fields
+ *     contactDatas: [{ ... }],  // the one contact's data
+ *     insertIfNotExists: bool,
+ *     throwExceptionIfInvalidRecord: bool,
+ *   }
+ *
+ * For multi-contact bulk calls, reps can switch to Developer view and
+ * hand-edit the JSON to include more entries (the API accepts up to
+ * 1000 per call).
+ */
+export function transformContactUpsertPayload(flat: unknown): unknown {
+  if (!flat || typeof flat !== "object" || Array.isArray(flat)) return flat;
+  const f = flat as Record<string, unknown>;
+
+  // Fields that are part of the contactData row (vs top-level config fields).
+  const contactFields = [
+    "contact_key",
+    "new_contact_key",
+    "email",
+    "name",
+    "surname",
+    "gsm",
+    "birth_date",
+    "gender",
+    "subscription_date",
+    "email_permission",
+    "gsm_permission",
+  ];
+
+  const contactData: Record<string, unknown> = {};
+  const columns: string[] = [];
+
+  for (const key of contactFields) {
+    const v = f[key];
+    if (v === undefined || v === "" || v === null) continue;
+    contactData[key] = v;
+    // contact_key is mandatory + implicit; not useful to list in columns.
+    // new_contact_key is for renaming, always included when present.
+    if (key !== "contact_key") columns.push(key);
+  }
+
+  // contact_key is required on each row; if not set, include it as-is so
+  // Dengage returns a validation error the rep can actually read.
+  if (contactData.contact_key === undefined && typeof f.contact_key === "string") {
+    contactData.contact_key = f.contact_key;
+  }
+
+  return {
+    columns,
+    contactDatas: [contactData],
+    insertIfNotExists: f.insertIfNotExists !== false,
+    throwExceptionIfInvalidRecord: f.throwExceptionIfInvalidRecord !== false,
+  };
+}
+

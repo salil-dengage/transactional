@@ -1,6 +1,10 @@
 import { env } from "./env";
 import type { FormSchema, FormValues } from "./form-schema";
-import { preSubstituteRawHtmlPayload, transformBulkPayload } from "./merge-tags";
+import {
+  preSubstituteRawHtmlPayload,
+  transformBulkPayload,
+  transformContactUpsertPayload,
+} from "./merge-tags";
 
 export type EndpointCategory =
   | "messaging"
@@ -37,7 +41,12 @@ export const categoryMeta: Record<EndpointCategory, { label: string; blurb: stri
   },
 };
 
-export type PreviewKind = "email" | "template-list" | "delivery-report" | "json";
+export type PreviewKind =
+  | "email"
+  | "template-list"
+  | "delivery-report"
+  | "contact-upsert"
+  | "json";
 
 export interface Scenario {
   id: string;
@@ -705,6 +714,232 @@ export const endpoints: DengageEndpoint[] = [
       "  * The transactionId query parameter is silently ignored on this account - a valid ID from a prior send returns the time-range fallback instead of the expected single record.",
       "  * Sends made via POST /transactional/email on the REST API do not appear in this report's result set, even when filtered by their returned groupId or recipient email. The Dengage admin UI shows them, so the data exists, but it isn't exposed by this documented REST endpoint for our authenticated account.",
       "  * The report does return account-scoped monitoring traffic (mustafa@dengage.com 'RestApi Test Email' pings), so the endpoint itself works - the issue is which sends it indexes.",
+    ],
+  },
+
+  // 3) BULK UPSERT CONTACTS
+  //    Insert or update contacts in the master_contact table. Single-
+  //    contact form; for multi-contact bulk (up to 1000) reps can
+  //    hand-edit the JSON in Developer view.
+  {
+    id: "bulk-upsert-contacts",
+    name: "Bulk Upsert Contacts",
+    description:
+      "Insert new contacts or update existing ones in Dengage's master_contact table. Great demo for showing audience ingestion. Up to 1,000 records per call; Dengage rate-limits this to one call per minute per account.",
+    category: "audience",
+    tags: ["contacts", "data", "bulk", "upsert"],
+    docsUrl: "https://dev.dengage.com/reference/updatecontactsbulk",
+    method: "POST",
+    path: "/bulk/contacts",
+    previewKind: "contact-upsert",
+    form: {
+      // Single-contact flat form; transformed into the documented nested
+      // { columns, contactDatas, ... } shape server-side.
+      fields: [
+        {
+          name: "contact_key",
+          label: "Contact key (unique ID, required)",
+          type: "text",
+          required: true,
+          placeholder: "e.g. the customer's email or internal user ID",
+          help: "Mandatory. Unique across master_contact. Most orgs use email or internal user ID.",
+        },
+        {
+          name: "email",
+          label: "Email",
+          type: "email",
+          placeholder: "salil.gupta@dengage.com",
+          help: "Dengage lowercases it automatically. Setting email flips email status to Active.",
+        },
+        {
+          name: "name",
+          label: "First name",
+          type: "text",
+          placeholder: "Salil",
+        },
+        {
+          name: "surname",
+          label: "Surname",
+          type: "text",
+          placeholder: "Gupta",
+        },
+        {
+          name: "gsm",
+          label: "Phone (GSM)",
+          type: "text",
+          placeholder: "Country code + number, no +  (e.g. 919876543210)",
+          help: "Dengage PHONE format: country code immediately followed by the number, digits only.",
+        },
+        {
+          name: "gender",
+          label: "Gender",
+          type: "select",
+          options: [
+            { value: "", label: "(not set)" },
+            { value: "M", label: "Male" },
+            { value: "F", label: "Female" },
+            { value: "O", label: "Other" },
+          ],
+        },
+        {
+          name: "birth_date",
+          label: "Birth date",
+          type: "text",
+          placeholder: "YYYY-MM-DD",
+          help: "Dengage DATE format (YYYY-MM-DD).",
+        },
+        {
+          name: "subscription_date",
+          label: "Subscription date",
+          type: "text",
+          placeholder: "YYYY-MM-DD",
+        },
+        {
+          name: "email_permission",
+          label: "Email opt-in",
+          type: "boolean",
+          default: true,
+        },
+        {
+          name: "gsm_permission",
+          label: "SMS opt-in",
+          type: "boolean",
+          default: false,
+        },
+        {
+          name: "new_contact_key",
+          label: "Rename contact_key (optional)",
+          type: "text",
+          placeholder: "Use this to change the contact_key of an existing record",
+          help: "If provided, the contact's key is renamed to this value. Skip for normal upserts.",
+        },
+        {
+          name: "insertIfNotExists",
+          label: "Insert if not found",
+          type: "boolean",
+          default: true,
+          help: "When true, a contact_key that doesn't exist gets created. When false, only updates happen.",
+        },
+        {
+          name: "throwExceptionIfInvalidRecord",
+          label: "Strict validation",
+          type: "boolean",
+          default: true,
+          help: "When true, any invalid record aborts the call. When false, invalid rows are skipped and reported in errors[].",
+        },
+      ],
+    },
+    scenarios: [
+      {
+        id: "new-contact",
+        name: "Create a new contact",
+        description: "Full profile for a brand-new signup.",
+        values: {
+          contact_key: defaultRecipient(),
+          email: defaultRecipient(),
+          name: "Salil",
+          surname: "Gupta",
+          gsm: "",
+          gender: "M",
+          birth_date: "1990-01-15",
+          subscription_date: new Date().toISOString().slice(0, 10),
+          email_permission: true,
+          gsm_permission: false,
+          new_contact_key: "",
+          insertIfNotExists: true,
+          throwExceptionIfInvalidRecord: true,
+        },
+      },
+      {
+        id: "update-profile",
+        name: "Update profile fields",
+        description: "Update name/surname on an existing contact.",
+        values: {
+          contact_key: defaultRecipient(),
+          email: "",
+          name: "Salil",
+          surname: "Gupta-Updated",
+          gsm: "",
+          gender: "",
+          birth_date: "",
+          subscription_date: "",
+          email_permission: true,
+          gsm_permission: false,
+          new_contact_key: "",
+          insertIfNotExists: false,
+          throwExceptionIfInvalidRecord: true,
+        },
+      },
+      {
+        id: "opt-in",
+        name: "Opt contact into email + SMS",
+        description: "Flip permissions to true.",
+        values: {
+          contact_key: defaultRecipient(),
+          email: "",
+          name: "",
+          surname: "",
+          gsm: "",
+          gender: "",
+          birth_date: "",
+          subscription_date: "",
+          email_permission: true,
+          gsm_permission: true,
+          new_contact_key: "",
+          insertIfNotExists: false,
+          throwExceptionIfInvalidRecord: true,
+        },
+      },
+      {
+        id: "opt-out",
+        name: "Opt contact out of email + SMS",
+        description: "Flip permissions to false.",
+        values: {
+          contact_key: defaultRecipient(),
+          email: "",
+          name: "",
+          surname: "",
+          gsm: "",
+          gender: "",
+          birth_date: "",
+          subscription_date: "",
+          email_permission: false,
+          gsm_permission: false,
+          new_contact_key: "",
+          insertIfNotExists: false,
+          throwExceptionIfInvalidRecord: true,
+        },
+      },
+    ],
+    defaultPayload: () => ({
+      columns: ["email", "name", "surname", "email_permission"],
+      contactDatas: [
+        {
+          contact_key: defaultRecipient(),
+          email: defaultRecipient(),
+          name: "Salil",
+          surname: "Gupta",
+          email_permission: true,
+        },
+        {
+          contact_key: "demo+2@example.com",
+          email: "demo+2@example.com",
+          name: "Demo",
+          surname: "User",
+          email_permission: true,
+        },
+      ],
+      insertIfNotExists: true,
+      throwExceptionIfInvalidRecord: true,
+    }),
+    transformPayload: transformContactUpsertPayload,
+    notes: [
+      "Rate limit: Dengage processes this endpoint at most ONE request per minute per account. Back-to-back clicks during a demo will be rejected - wait 60 seconds between runs.",
+      "The form submits ONE contact per call. To demo the bulk aspect (up to 1,000 rows in one call), switch to Developer view and hand-edit contactDatas[].",
+      "contact_key is mandatory on every row and must be unique across master_contact. Emails are lowercased automatically.",
+      "The portal auto-generates the 'columns' array from whichever fields you fill - empty fields are excluded so you don't accidentally clear existing values.",
+      "Custom columns beyond the documented ones (e.g. loyalty_tier) can be added by hand in Developer view, provided they're marked import-enabled in your account config.",
+      "Failed records land in errors[], partial-success warnings in warnings[] - the preview surfaces both.",
     ],
   },
 ];
