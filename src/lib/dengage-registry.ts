@@ -106,8 +106,11 @@ export const endpoints: DengageEndpoint[] = [
     path: "/transactional/email",
     previewKind: "email",
     form: {
-      // Fields are flat on the UI for demo simplicity, but mapped into the
-      // nested JSON Dengage expects: { send: {...}, content: {...}, reporting: {...} }.
+      // Flat UI; nested JSON per Dengage SDK spec. Structure:
+      //   send:     { to, cc, bcc }
+      //   content:  { templateId, subject, fromNameId, preheader, params? }
+      //   reporting:{ trackOpen, trackClick }
+      //   replyTo is top-level
       fields: [
         {
           name: "to",
@@ -128,18 +131,12 @@ export const endpoints: DengageEndpoint[] = [
           help: "Copy the template ID from the Dengage UI (Transactional > Templates).",
         },
         {
-          name: "fromName",
-          label: "From name (optional)",
+          name: "fromNameId",
+          label: "From-name ID (optional)",
           type: "text",
-          placeholder: "e.g. Acme Support",
-          payloadPath: "send.fromName",
-        },
-        {
-          name: "fromEmail",
-          label: "From email (optional)",
-          type: "email",
-          placeholder: "e.g. no-reply@acme.com",
-          payloadPath: "send.fromEmail",
+          placeholder: "UUID from Dengage > Senders",
+          payloadPath: "content.fromNameId",
+          help: "Dengage expects an ID, not a free-text name. Leave empty to use the template's default sender.",
         },
         {
           name: "subject",
@@ -149,14 +146,42 @@ export const endpoints: DengageEndpoint[] = [
           payloadPath: "content.subject",
         },
         {
+          name: "preheader",
+          label: "Preheader (optional)",
+          type: "text",
+          placeholder: "Short teaser shown next to the subject in many inboxes",
+          payloadPath: "content.preheader",
+        },
+        {
           name: "params",
           label: "Personalization variables",
           type: "key-value",
           keyLabel: "Variable name",
           valueLabel: "Value",
           payloadPath: "content.params",
-          help: "Key-value pairs passed to the template (e.g. firstName = Salil).",
+          help: "Key-value pairs for template merge tags. The field name (content.params) isn't in the public SDK spec - if your template expects a different name (e.g. content.bodyParams) edit in Developer view.",
           default: { firstName: "Salil" },
+        },
+        {
+          name: "cc",
+          label: "CC (optional)",
+          type: "email",
+          placeholder: "cc@example.com",
+          payloadPath: "send.cc",
+        },
+        {
+          name: "bcc",
+          label: "BCC (optional)",
+          type: "email",
+          placeholder: "bcc@example.com",
+          payloadPath: "send.bcc",
+        },
+        {
+          name: "replyTo",
+          label: "Reply-To (optional)",
+          type: "email",
+          placeholder: "reply@example.com",
+          payloadPath: "replyTo",
         },
         {
           name: "trackOpen",
@@ -183,9 +208,8 @@ export const endpoints: DengageEndpoint[] = [
         description: "New user just signed up.",
         values: {
           to: defaultRecipient(),
-          fromName: "Acme",
-          fromEmail: "welcome@acme.com",
           subject: "Welcome to Acme, {{firstName}}!",
+          preheader: "Here's everything you need to get started.",
           params: { firstName: "Salil", product: "Acme Pro" },
           trackOpen: true,
           trackClick: true,
@@ -197,9 +221,8 @@ export const endpoints: DengageEndpoint[] = [
         description: "Customer just placed an order.",
         values: {
           to: defaultRecipient(),
-          fromName: "Acme Orders",
-          fromEmail: "orders@acme.com",
           subject: "Your order #A-10042 is confirmed",
+          preheader: "Estimated delivery: 3-5 business days",
           params: {
             firstName: "Salil",
             orderId: "A-10042",
@@ -216,9 +239,8 @@ export const endpoints: DengageEndpoint[] = [
         description: "User requested a password reset link.",
         values: {
           to: defaultRecipient(),
-          fromName: "Acme Security",
-          fromEmail: "security@acme.com",
           subject: "Reset your Acme password",
+          preheader: "This link expires in 30 minutes.",
           params: {
             firstName: "Salil",
             resetLink: "https://acme.com/reset?token=demo-token-abcxyz",
@@ -230,23 +252,19 @@ export const endpoints: DengageEndpoint[] = [
       },
     ],
     defaultPayload: () => ({
-      send: {
-        to: defaultRecipient(),
-        fromName: "Dengage Demo",
-        fromEmail: "no-reply@yourdomain.com",
-      },
+      send: { to: defaultRecipient() },
       content: {
         templateId: "REPLACE_WITH_TEMPLATE_ID",
         subject: "Hello from the Dengage showcase portal",
+        preheader: "A quick note from the showcase portal.",
         params: { firstName: "Prospect" },
       },
       reporting: { trackOpen: true, trackClick: false },
     }),
     notes: [
-      "Body is nested: send{}, content{}, reporting{} at the top level. The Functional form is flat for demo clarity; the JSON shown in Developer view is what Dengage actually receives.",
-      "Grab the templateId from the Dengage UI under Transactional > Templates.",
-      "Keys under 'Personalization variables' land at content.params and are passed into your template's merge tags.",
-      "If Dengage rejects a field name (e.g. wants 'content.bodyParams' instead of 'content.params'), open Developer view and edit the JSON directly - the portal sends exactly what you see.",
+      "Body is nested - send{}, content{}, reporting{}, with replyTo at the top level. The form is flat for demo clarity; the JSON in Developer view is what Dengage actually receives.",
+      "Dengage expects content.fromNameId (a UUID from your Senders config), not a free-text From name. Leave blank to use the template's default sender.",
+      "If Dengage rejects 'content.params' in your workspace, adjust the key in Developer view - not all workspaces use the same merge-variable field name.",
     ],
   },
 

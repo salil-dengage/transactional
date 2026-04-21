@@ -14,17 +14,21 @@ export default function EmailPreview({
   sendResult?: { ok: boolean; status: number; responseBody: unknown } | null;
 }) {
   const to = (values.to as string) || "demo@example.com";
+  const cc = values.cc as string | undefined;
+  const bcc = values.bcc as string | undefined;
   const templateId = (values.templateId as string) || "";
   const params = (values.params as Record<string, string>) || {};
   const subjectOverride = values.subject as string | undefined;
-  const fromName = (values.fromName as string) || "Sender";
-  const fromEmail = (values.fromEmail as string) || "no-reply@example.com";
+  const preheader = values.preheader as string | undefined;
+  const fromNameId = values.fromNameId as string | undefined;
+  const replyTo = values.replyTo as string | undefined;
 
   const resolvedSubject = subjectOverride
     ? substitute(subjectOverride, params)
     : templateId
     ? `(rendered by Dengage template ${templateId})`
     : "(no subject)";
+  const resolvedPreheader = preheader ? substitute(preheader, params) : undefined;
 
   return (
     <div>
@@ -50,11 +54,17 @@ export default function EmailPreview({
         }}
       >
         <div style={{ padding: "14px 18px", borderBottom: "1px solid #eee" }}>
-          <div style={{ fontWeight: 700, marginBottom: 4 }}>{resolvedSubject}</div>
+          <div style={{ fontWeight: 700, marginBottom: 2 }}>{resolvedSubject}</div>
+          {resolvedPreheader ? (
+            <div style={{ color: "#888", fontSize: 12, marginBottom: 6 }}>{resolvedPreheader}</div>
+          ) : null}
           <div style={{ color: "#666", fontSize: 12 }}>
-            From: <strong>{fromName}</strong> &lt;{fromEmail}&gt;
+            From: {fromNameId ? <>sender ID <code style={{ fontFamily: "var(--mono)" }}>{fromNameId}</code></> : <em>template default</em>}
           </div>
           <div style={{ color: "#666", fontSize: 12 }}>To: {to}</div>
+          {cc ? <div style={{ color: "#666", fontSize: 12 }}>Cc: {cc}</div> : null}
+          {bcc ? <div style={{ color: "#666", fontSize: 12 }}>Bcc: {bcc}</div> : null}
+          {replyTo ? <div style={{ color: "#666", fontSize: 12 }}>Reply-To: {replyTo}</div> : null}
           {templateId ? (
             <div style={{ color: "#666", fontSize: 12, fontFamily: "var(--mono)", marginTop: 4 }}>
               Template ID: {templateId}
