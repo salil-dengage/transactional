@@ -1,7 +1,18 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import type { FormField, FormSchema, FormValues, SelectOption } from "@/lib/form-schema";
+import type { Attribute, FormField, FormSchema, FormValues, SelectOption } from "@/lib/form-schema";
+
+const DENGAGE_DATA_TYPES = [
+  "TEXT",
+  "DATE",
+  "DATETIME",
+  "INTEGER",
+  "DECIMAL",
+  "BOOLEAN",
+  "EMAIL",
+  "PHONE",
+];
 
 function getByPath(obj: unknown, path: string | undefined): unknown {
   if (!path) return undefined;
@@ -214,6 +225,112 @@ function KeyValueEditor({
   );
 }
 
+function AttributeListEditor({
+  value,
+  onChange,
+  valueTypes,
+}: {
+  value: Attribute[];
+  onChange: (next: Attribute[]) => void;
+  valueTypes?: string[];
+}) {
+  const types = valueTypes && valueTypes.length > 0 ? valueTypes : DENGAGE_DATA_TYPES;
+  const rows = Array.isArray(value) ? value : [];
+
+  function update(idx: number, patch: Partial<Attribute>) {
+    const next = rows.map((r, i) => (i === idx ? { ...r, ...patch } : r));
+    onChange(next);
+  }
+  function add() {
+    onChange([...rows, { name: "", type: "TEXT", value: "" }]);
+  }
+  function remove(idx: number) {
+    onChange(rows.filter((_, i) => i !== idx));
+  }
+
+  return (
+    <div>
+      {rows.length > 0 ? (
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "1.2fr 0.9fr 1.6fr max-content",
+            gap: 8,
+            marginBottom: 6,
+            fontSize: 11,
+            textTransform: "uppercase",
+            letterSpacing: 0.6,
+            color: "var(--muted)",
+          }}
+        >
+          <div>Attribute name</div>
+          <div>Data type</div>
+          <div>Value</div>
+          <div />
+        </div>
+      ) : (
+        <div className="muted" style={{ fontSize: 13, marginBottom: 8 }}>
+          No attributes yet - click &quot;+ Add attribute&quot; to start building the event payload.
+        </div>
+      )}
+      {rows.map((row, i) => (
+        <div
+          key={i}
+          style={{
+            display: "grid",
+            gridTemplateColumns: "1.2fr 0.9fr 1.6fr max-content",
+            gap: 8,
+            marginBottom: 6,
+          }}
+        >
+          <input
+            placeholder="e.g. product_id"
+            value={row.name}
+            onChange={(e) => update(i, { name: e.target.value })}
+          />
+          <select
+            value={row.type || "TEXT"}
+            onChange={(e) => update(i, { type: e.target.value })}
+            style={{
+              background: "var(--panel-2)",
+              color: "var(--text)",
+              border: "1px solid var(--border)",
+              borderRadius: 6,
+              padding: "10px 12px",
+              fontSize: 14,
+            }}
+          >
+            {types.map((t) => (
+              <option key={t} value={t}>{t}</option>
+            ))}
+          </select>
+          <input
+            placeholder="value"
+            value={row.value}
+            onChange={(e) => update(i, { value: e.target.value })}
+          />
+          <button
+            type="button"
+            className="secondary"
+            onClick={() => remove(i)}
+            style={{ padding: "6px 10px", fontSize: 12 }}
+          >
+            Remove
+          </button>
+        </div>
+      ))}
+      <button
+        type="button"
+        className="secondary"
+        onClick={add}
+        style={{ padding: "6px 12px", fontSize: 13, marginTop: 4 }}
+      >
+        + Add attribute
+      </button>
+    </div>
+  );
+}
+
 export default function FormRenderer({
   schema,
   values,
@@ -356,6 +473,14 @@ function FieldControl({
           onChange={onChange}
           keyLabel={field.keyLabel}
           valueLabel={field.valueLabel}
+        />
+      );
+    case "attribute-list":
+      return (
+        <AttributeListEditor
+          value={(value as Attribute[]) || []}
+          onChange={onChange}
+          valueTypes={field.valueTypes}
         />
       );
     case "json":

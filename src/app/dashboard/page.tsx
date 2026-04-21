@@ -5,6 +5,7 @@ import HealthCheck from "./health-check";
 const CATEGORY_ORDER: EndpointCategory[] = [
   "messaging",
   "audience",
+  "events",
   "campaigns",
   "data",
   "reports",

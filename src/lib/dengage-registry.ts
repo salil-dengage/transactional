@@ -4,6 +4,7 @@ import {
   preSubstituteRawHtmlPayload,
   transformBulkPayload,
   transformContactUpsertPayload,
+  transformCustomEventPayload,
   transformOrdersPayload,
   transformProductsPayload,
   transformUpsertDataV2Payload,
@@ -13,6 +14,7 @@ export type EndpointCategory =
   | "messaging"
   | "audience"
   | "data"
+  | "events"
   | "campaigns"
   | "reports"
   | "other";
@@ -29,6 +31,10 @@ export const categoryMeta: Record<EndpointCategory, { label: string; blurb: stri
   data: {
     label: "Data",
     blurb: "Import and export data in and out of Dengage.",
+  },
+  events: {
+    label: "Events",
+    blurb: "Push behavioural and custom events into your big-data tables in real time.",
   },
   campaigns: {
     label: "Campaigns",
@@ -180,6 +186,16 @@ function dengageDateTimeDaysAgo(days: number): string {
 }
 function dengageDateTimeNow(): string {
   return dengageDateTime(new Date());
+}
+
+// ISO-like 'YYYY-MM-DD HH:mm:ss' (UTC, no Z) - matches one of Dengage's
+// accepted DATETIME formats and is the most intuitive for a presales demo.
+function dengageNowDateTime(): string {
+  const d = new Date();
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())} ${pad(
+    d.getUTCHours(),
+  )}:${pad(d.getUTCMinutes())}:${pad(d.getUTCSeconds())}`;
 }
 
 export const endpoints: DengageEndpoint[] = [
@@ -1373,6 +1389,132 @@ export const endpoints: DengageEndpoint[] = [
       "Form sends ONE order per call; the API accepts bulk orders. For multi-order submissions, hand-edit orders[] in Developer view.",
     ],
   },
+
+  // 7) SEND CUSTOM EVENT
+  //    Form: Table Name + attribute-list (Name | Type | Value).
+  //    Backed by UpsertData-Async V2 - functionally equivalent to the JS
+  //    SDK's sendDeviceEvent, but server-side via the documented REST path.
+  {
+    id: "send-custom-event",
+    name: "Send Custom Event",
+    description:
+      "Fire a single custom event into any big-data table linked to master_device. Reps show the event leave this portal; a quick tab over to Dengage Analytics > Data Space confirms it landed within seconds. Great demo of real-time event ingestion.",
+    category: "events",
+    tags: ["events", "data", "bigdata", "custom"],
+    docsUrl: "https://dev.dengage.com/reference/post_dataspace-async-upsert-v2",
+    method: "POST",
+    path: "/dataspace/async/upsert_v2",
+    previewKind: "async-upsert",
+    form: {
+      fields: [
+        {
+          name: "tableName",
+          label: "Table name",
+          type: "text",
+          required: true,
+          placeholder: "e.g. page_view_events",
+          help: "Must be an existing big-data table in your Dengage account. Custom events cannot be written to master_contact.",
+        },
+        {
+          name: "attributes",
+          label: "Event attributes",
+          type: "attribute-list",
+          help: "One row per column in the target table. The Type selector maps to Dengage's data-type spec - INTEGER / DECIMAL / BOOLEAN values are coerced to real numbers / booleans on the wire; everything else goes as text for Dengage to validate.",
+          default: [],
+        },
+      ],
+    },
+    scenarios: [
+      {
+        id: "page-view",
+        name: "Page view (page_view_events)",
+        description: "A visitor viewing a product detail page.",
+        values: {
+          tableName: "page_view_events",
+          attributes: [
+            { name: "key", type: "TEXT", value: defaultRecipient() },
+            { name: "event_date", type: "DATETIME", value: dengageNowDateTime() },
+            { name: "session_id", type: "TEXT", value: "sess_abc123" },
+            { name: "page_type", type: "TEXT", value: "product" },
+            { name: "page_url", type: "TEXT", value: "https://acme.com/products/wireless-headphones" },
+            { name: "page_title", type: "TEXT", value: "Acme Wireless Headphones" },
+            { name: "product_id", type: "TEXT", value: "P-1001" },
+            { name: "category_id", type: "TEXT", value: "audio" },
+            { name: "promotion_id", type: "TEXT", value: "" },
+            { name: "price", type: "DECIMAL", value: "199.00" },
+            { name: "discounted_price", type: "DECIMAL", value: "149.00" },
+            { name: "stock_count", type: "INTEGER", value: "124" },
+            { name: "category_path", type: "TEXT", value: "electronics/audio/headphones" },
+          ],
+        },
+      },
+      {
+        id: "add-to-cart",
+        name: "Add to cart (add_to_cart_events)",
+        description: "A visitor adding a product variant to their cart.",
+        values: {
+          tableName: "add_to_cart_events",
+          attributes: [
+            { name: "key", type: "TEXT", value: defaultRecipient() },
+            { name: "event_date", type: "DATETIME", value: dengageNowDateTime() },
+            { name: "session_id", type: "TEXT", value: "sess_abc123" },
+            { name: "product_id", type: "TEXT", value: "P-1001" },
+            { name: "product_variant_id", type: "TEXT", value: "P-1001-BLK" },
+            { name: "quantity", type: "INTEGER", value: "1" },
+            { name: "unit_price", type: "DECIMAL", value: "199.00" },
+            { name: "discounted_price", type: "DECIMAL", value: "149.00" },
+          ],
+        },
+      },
+      {
+        id: "purchase-complete",
+        name: "Purchase complete (purchase_events)",
+        description: "A successful checkout.",
+        values: {
+          tableName: "purchase_events",
+          attributes: [
+            { name: "key", type: "TEXT", value: defaultRecipient() },
+            { name: "event_date", type: "DATETIME", value: dengageNowDateTime() },
+            { name: "session_id", type: "TEXT", value: "sess_abc123" },
+            { name: "order_id", type: "TEXT", value: "A-10042" },
+            { name: "total_amount", type: "DECIMAL", value: "178.00" },
+            { name: "item_count", type: "INTEGER", value: "3" },
+            { name: "payment_method", type: "TEXT", value: "credit_card" },
+            { name: "order_source", type: "TEXT", value: "web" },
+          ],
+        },
+      },
+      {
+        id: "blank",
+        name: "Blank custom event",
+        description: "Start from scratch with one empty row.",
+        values: {
+          tableName: "",
+          attributes: [{ name: "", type: "TEXT", value: "" }],
+        },
+      },
+    ],
+    defaultPayload: () => ({
+      tableName: "page_view_events",
+      columns: ["key", "event_date", "session_id", "page_url", "product_id"],
+      rows: [
+        [
+          defaultRecipient(),
+          dengageNowDateTime(),
+          "sess_abc123",
+          "https://acme.com/products/wireless-headphones",
+          "P-1001",
+        ],
+      ],
+    }),
+    transformPayload: transformCustomEventPayload,
+    notes: [
+      "This is a light, demo-friendly wrapper around UpsertData-Async V2 - so it posts to /dataspace/async/upsert_v2. Functionally equivalent to what the JS SDK's sendDeviceEvent call does, but kept flat + fast for a demo.",
+      "Table Name must refer to a big-data table already configured in your Dengage account. Unlike the SDK, the REST version does NOT auto-populate 'key' or 'event_date' - scenarios pre-fill both; keep or remove them per your table's schema.",
+      "Data types in the Type column drive on-the-wire JSON coercion: INTEGER / DECIMAL become numbers, BOOLEAN becomes true/false, everything else sends as a string.",
+      "Rate limit applies per target table (1 call/minute). Jobs are processed asynchronously - event should land in Dengage Analytics > Data Space within seconds.",
+    ],
+  },
 ];
 
 export function getEndpoint(id: string): DengageEndpoint | undefined {
@@ -1384,6 +1526,7 @@ export function endpointsByCategory(): Record<EndpointCategory, DengageEndpoint[
     messaging: [],
     audience: [],
     data: [],
+    events: [],
     campaigns: [],
     reports: [],
     other: [],

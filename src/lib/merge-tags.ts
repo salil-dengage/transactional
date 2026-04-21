@@ -305,3 +305,59 @@ export function transformOrdersPayload(flat: unknown): unknown {
   return { orders: [order] };
 }
 
+/**
+ * Custom event transform: Table Name + attribute-list -> UpsertData V2 body.
+ *
+ * Attribute rows are { name, type, value }. We coerce the value by type
+ * (INTEGER -> parseInt, DECIMAL -> parseFloat, BOOLEAN -> true/false) so
+ * Dengage gets the right JSON type on the wire. TEXT/DATE/DATETIME/EMAIL/
+ * PHONE go through as strings (Dengage does its own format validation).
+ *
+ * Empty-named rows are dropped. If no attributes at all are filled, the
+ * payload is left without columns/rows so Dengage can respond with a real
+ * validation error the rep can see.
+ */
+function coerceAttributeValue(type: string, raw: string): unknown {
+  if (raw === undefined || raw === null) return raw;
+  const s = String(raw);
+  if (s.length === 0) return s;
+  switch ((type || "TEXT").toUpperCase()) {
+    case "INTEGER": {
+      const n = parseInt(s, 10);
+      return Number.isFinite(n) ? n : s;
+    }
+    case "DECIMAL": {
+      const n = parseFloat(s);
+      return Number.isFinite(n) ? n : s;
+    }
+    case "BOOLEAN": {
+      const v = s.trim().toLowerCase();
+      if (v === "true") return true;
+      if (v === "false") return false;
+      return s;
+    }
+    default:
+      return s;
+  }
+}
+
+export function transformCustomEventPayload(flat: unknown): unknown {
+  if (!flat || typeof flat !== "object" || Array.isArray(flat)) return flat;
+  const f = flat as Record<string, unknown>;
+
+  const out: Record<string, unknown> = {};
+  if (typeof f.tableName === "string" && f.tableName) out.tableName = f.tableName;
+  if (typeof f.tableId === "string" && f.tableId) out.tableId = f.tableId;
+
+  const attrs = Array.isArray(f.attributes)
+    ? (f.attributes as Array<{ name?: string; type?: string; value?: string }>)
+    : [];
+  const filled = attrs.filter((a) => a && typeof a.name === "string" && a.name.length > 0);
+  if (filled.length > 0) {
+    out.columns = filled.map((a) => String(a.name));
+    out.rows = [filled.map((a) => coerceAttributeValue(a.type || "TEXT", String(a.value ?? "")))];
+  }
+
+  return out;
+}
+

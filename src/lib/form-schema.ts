@@ -7,6 +7,7 @@ export type FieldType =
   | "select"
   | "async-select"
   | "key-value"
+  | "attribute-list"
   | "json";
 
 export interface BaseField<T extends FieldType = FieldType> {
@@ -61,6 +62,18 @@ export interface KeyValueField extends BaseField<"key-value"> {
   valueLabel?: string;
 }
 
+export interface Attribute {
+  name: string;
+  type: string;
+  value: string;
+}
+
+export interface AttributeListField extends BaseField<"attribute-list"> {
+  default?: Attribute[];
+  /** Available Dengage data types for the Type selector. */
+  valueTypes?: string[];
+}
+
 export interface JsonField extends BaseField<"json"> {
   default?: unknown;
 }
@@ -72,6 +85,7 @@ export type FormField =
   | SelectField
   | AsyncSelectField
   | KeyValueField
+  | AttributeListField
   | JsonField;
 
 export interface FormSchema {
@@ -109,6 +123,7 @@ export function seedValues(schema: FormSchema): FormValues {
   for (const f of schema.fields) {
     if ("default" in f && f.default !== undefined) v[f.name] = f.default;
     else if (f.type === "key-value") v[f.name] = {};
+    else if (f.type === "attribute-list") v[f.name] = [];
     else if (f.type === "boolean") v[f.name] = false;
   }
   return v;
