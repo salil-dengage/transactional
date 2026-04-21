@@ -165,9 +165,11 @@ export function transformContactUpsertPayload(flat: unknown): unknown {
     const v = f[key];
     if (v === undefined || v === "" || v === null) continue;
     contactData[key] = v;
-    // contact_key is mandatory + implicit; not useful to list in columns.
-    // new_contact_key is for renaming, always included when present.
-    if (key !== "contact_key") columns.push(key);
+    // contact_key must be listed in columns too - Dengage rejects with
+    // 'You must send contact_key in columns' otherwise. Only skip
+    // new_contact_key here because it's a rename directive, not a column
+    // Dengage can upsert against; include it only when actually present.
+    columns.push(key);
   }
 
   // contact_key is required on each row; if not set, include it as-is so
