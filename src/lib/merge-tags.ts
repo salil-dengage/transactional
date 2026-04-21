@@ -186,3 +186,122 @@ export function transformContactUpsertPayload(flat: unknown): unknown {
   };
 }
 
+/**
+ * UpsertData-Async V2 transform: CSV textarea -> Dengage's documented
+ * { tableId | tableName, columns, rows } body.
+ *
+ * Reps paste CSV (headers on the first row, data rows below) in the form,
+ * then the proxy transforms it into the explicit columns + rows arrays
+ * the V2 endpoint expects. No base64, no columnMapping - V2 strictly
+ * simpler than V1.
+ *
+ * Basic CSV parsing: splits on commas, trims whitespace. Does NOT handle
+ * quoted values with embedded commas - demo scenarios control the CSV
+ * shape so this is sufficient; power users can hand-edit the columns/rows
+ * arrays directly in Developer view.
+ */
+export function transformUpsertDataV2Payload(flat: unknown): unknown {
+  if (!flat || typeof flat !== "object" || Array.isArray(flat)) return flat;
+  const f = flat as Record<string, unknown>;
+
+  const out: Record<string, unknown> = {};
+  if (typeof f.tableId === "string" && f.tableId) out.tableId = f.tableId;
+  if (typeof f.tableName === "string" && f.tableName) out.tableName = f.tableName;
+
+  const csv = typeof f.csvContent === "string" ? f.csvContent : "";
+  if (csv.trim().length > 0) {
+    const lines = csv.split(/\r?\n/).map((l) => l.trim()).filter((l) => l.length > 0);
+    if (lines.length > 0) {
+      const parseLine = (l: string) => l.split(",").map((c) => c.trim());
+      out.columns = parseLine(lines[0]);
+      out.rows = lines.slice(1).map(parseLine);
+    }
+  } else if (Array.isArray(f.columns) && Array.isArray(f.rows)) {
+    // Power-user path: user supplied columns/rows directly in JSON editor.
+    out.columns = f.columns;
+    out.rows = f.rows;
+  }
+
+  return out;
+}
+
+const PRODUCT_FIELDS = [
+  "product_id",
+  "title",
+  "brand",
+  "category_path",
+  "description",
+  "price",
+  "discounted_price",
+  "stock_count",
+  "link",
+  "image_link",
+  "small_image_link",
+  "large_image_link",
+  "mobile_web_link",
+  "is_active",
+  "publish_date",
+];
+
+/**
+ * UpsertProduct transform: flat UI for ONE product + variants JSON ->
+ * Dengage's { products: [ ... ] } top-level array body.
+ *
+ * The variants textarea is parsed as JSON (array of variant objects). For
+ * multi-product bulk, reps hand-edit the products[] array in Developer view.
+ */
+export function transformProductsPayload(flat: unknown): unknown {
+  if (!flat || typeof flat !== "object" || Array.isArray(flat)) return flat;
+  const f = flat as Record<string, unknown>;
+  if (Array.isArray(f.products)) return { products: f.products };
+
+  const product: Record<string, unknown> = {};
+  for (const key of PRODUCT_FIELDS) {
+    const v = f[key];
+    if (v === undefined || v === "" || v === null) continue;
+    product[key] = v;
+  }
+  const variants = f.variants;
+  if (Array.isArray(variants) && variants.length > 0) product.variants = variants;
+
+  return { products: [product] };
+}
+
+const ORDER_FIELDS = [
+  "contact_key",
+  "order_id",
+  "order_date",
+  "order_status",
+  "item_count",
+  "total_amount",
+  "order_source",
+  "order_source_name",
+  "payment_method",
+  "coupon_code",
+  "referrer",
+];
+
+/**
+ * UpsertOrders transform: flat UI for ONE order + items JSON ->
+ * Dengage's { orders: [ ... ] } top-level array body.
+ *
+ * The items textarea is parsed as JSON (array of item objects). For
+ * multi-order bulk, reps hand-edit the orders[] array in Developer view.
+ */
+export function transformOrdersPayload(flat: unknown): unknown {
+  if (!flat || typeof flat !== "object" || Array.isArray(flat)) return flat;
+  const f = flat as Record<string, unknown>;
+  if (Array.isArray(f.orders)) return { orders: f.orders };
+
+  const order: Record<string, unknown> = {};
+  for (const key of ORDER_FIELDS) {
+    const v = f[key];
+    if (v === undefined || v === "" || v === null) continue;
+    order[key] = v;
+  }
+  const items = f.items;
+  if (Array.isArray(items) && items.length > 0) order.items = items;
+
+  return { orders: [order] };
+}
+

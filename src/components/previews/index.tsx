@@ -6,6 +6,7 @@ import EmailPreview from "./EmailPreview";
 import TemplateListPreview from "./TemplateListPreview";
 import DeliveryReportPreview from "./DeliveryReportPreview";
 import ContactUpsertPreview from "./ContactUpsertPreview";
+import AsyncUpsertPreview from "./AsyncUpsertPreview";
 import JsonPreview from "./JsonPreview";
 
 export type SendResult = { ok: boolean; status: number; responseBody: unknown } | null;
@@ -28,6 +29,8 @@ export default function Preview({
       return <DeliveryReportPreview sendResult={sendResult} />;
     case "contact-upsert":
       return <ContactUpsertPreview values={values} sendResult={sendResult} />;
+    case "async-upsert":
+      return <AsyncUpsertPreview values={values} sendResult={sendResult} />;
     case "json":
     default:
       return <JsonPreview sendResult={sendResult} />;
