@@ -34,6 +34,7 @@ export default function EmailPreview({
   const preheader = values.preheader as string | undefined;
   const fromNameId = values.fromNameId as string | undefined;
   const replyTo = values.replyTo as string | undefined;
+  const htmlBody = values.html as string | undefined;
 
   const resolvedSubject = subjectOverride
     ? substitute(subjectOverride, params)
@@ -41,6 +42,9 @@ export default function EmailPreview({
     ? `(rendered by Dengage template ${templateId})`
     : "(no subject)";
   const resolvedPreheader = preheader ? substitute(preheader, params) : undefined;
+  // If the rep has filled the HTML body (or a scenario did), substitute params
+  // client-side so the preview matches what an end user would eventually see.
+  const renderedHtml = htmlBody ? substitute(htmlBody, params) : undefined;
 
   // Dengage returns HTTP 200 with {code:0, message:"Successful", data:{...}} on
   // success. Pull the useful IDs out so the rep can demo tracking.
@@ -132,40 +136,58 @@ export default function EmailPreview({
             </div>
           ) : null}
         </div>
-        <div style={{ padding: 22, color: "#333", minHeight: 180 }}>
-          <div style={{ marginBottom: 10, fontWeight: 600 }}>
-            Hi {params.firstName || "{{firstName}}"},
-          </div>
-          <div style={{ color: "#555", lineHeight: 1.6 }}>
-            The body of this email is rendered by Dengage using template{" "}
-            <strong style={{ fontFamily: "var(--mono)" }}>{templateId || "<not set>"}</strong>, so
-            its real look will reflect whatever HTML and copy you configured for that template in
-            the Dengage platform. The variables you fill in below are passed in as merge tags.
-          </div>
-          {Object.keys(params).length > 0 ? (
-            <div style={{ marginTop: 16 }}>
-              <div style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: 0.6, color: "#888", marginBottom: 6 }}>
-                Variables sent
-              </div>
-              <div
-                style={{
-                  display: "grid",
-                  gridTemplateColumns: "max-content 1fr",
-                  columnGap: 14,
-                  rowGap: 4,
-                  fontSize: 13,
-                }}
-              >
-                {Object.entries(params).map(([k, v]) => (
-                  <div key={k} style={{ display: "contents" }}>
-                    <div style={{ fontFamily: "var(--mono)", color: "#555" }}>{k}</div>
-                    <div>{v}</div>
-                  </div>
-                ))}
-              </div>
+        {renderedHtml ? (
+          <iframe
+            title="email body preview"
+            srcDoc={renderedHtml}
+            sandbox=""
+            style={{ width: "100%", height: 520, border: "none", background: "#fff" }}
+          />
+        ) : (
+          <div style={{ padding: 22, color: "#333", minHeight: 180 }}>
+            <div style={{ marginBottom: 10, fontWeight: 600 }}>
+              Hi {params.firstName || "{{firstName}}"},
             </div>
-          ) : null}
-        </div>
+            <div style={{ color: "#555", lineHeight: 1.6 }}>
+              The body of this email is rendered by Dengage using template{" "}
+              <strong style={{ fontFamily: "var(--mono)" }}>{templateId || "<not set>"}</strong>,
+              so its real look will reflect whatever HTML and copy you configured for that
+              template in the Dengage platform. The variables you fill in below are passed in as
+              merge tags.
+            </div>
+            {Object.keys(params).length > 0 ? (
+              <div style={{ marginTop: 16 }}>
+                <div
+                  style={{
+                    fontSize: 11,
+                    textTransform: "uppercase",
+                    letterSpacing: 0.6,
+                    color: "#888",
+                    marginBottom: 6,
+                  }}
+                >
+                  Variables sent
+                </div>
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "max-content 1fr",
+                    columnGap: 14,
+                    rowGap: 4,
+                    fontSize: 13,
+                  }}
+                >
+                  {Object.entries(params).map(([k, v]) => (
+                    <div key={k} style={{ display: "contents" }}>
+                      <div style={{ fontFamily: "var(--mono)", color: "#555" }}>{k}</div>
+                      <div>{v}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+          </div>
+        )}
       </div>
     </div>
   );

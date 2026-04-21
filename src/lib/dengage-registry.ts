@@ -75,6 +75,72 @@ export interface DengageEndpoint {
 
 const defaultRecipient = () => env.defaultDemoRecipient() || "demo@example.com";
 
+// Self-contained HTML emails baked into demo scenarios. Using these means the
+// rep can run a live send without first creating a template in Dengage - the
+// portal is immediately demo-ready. Merge tags use {{name}} and are passed
+// through content.params for Dengage's template engine to substitute.
+// (If Dengage doesn't substitute {{tags}} in raw html, the tags will appear
+// literally - we can fall back to client-side substitution if that happens.)
+const demoHtml = {
+  welcome: `<!DOCTYPE html><html><head><meta charset="utf-8"></head><body style="margin:0;padding:0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;background:#f5f6f8;">
+<table width="100%" cellpadding="0" cellspacing="0" style="background:#f5f6f8;padding:32px 12px;"><tr><td align="center">
+<table width="560" cellpadding="0" cellspacing="0" style="max-width:560px;background:#ffffff;border-radius:10px;overflow:hidden;box-shadow:0 1px 2px rgba(0,0,0,0.04);">
+<tr><td style="padding:36px 40px 0;">
+<div style="color:#6b7280;font-size:12px;letter-spacing:0.08em;text-transform:uppercase;">Acme</div>
+<h1 style="margin:12px 0 0;color:#111827;font-size:26px;line-height:1.25;">Welcome to Acme, {{firstName}}!</h1>
+</td></tr>
+<tr><td style="padding:20px 40px 8px;color:#4b5563;font-size:15px;line-height:1.6;">
+<p style="margin:0 0 14px;">Thanks for signing up for <strong>{{product}}</strong>. We're thrilled to have you on board.</p>
+<p style="margin:0 0 22px;">Here's how to get the most out of your account in the first 5 minutes:</p>
+<ol style="margin:0 0 22px;padding-left:20px;color:#4b5563;"><li style="margin-bottom:6px;">Set up your profile</li><li style="margin-bottom:6px;">Invite your teammates</li><li>Connect your first integration</li></ol>
+</td></tr>
+<tr><td style="padding:0 40px 36px;">
+<a href="https://acme.com/welcome" style="display:inline-block;background:#4f46e5;color:#ffffff;padding:12px 22px;text-decoration:none;border-radius:6px;font-weight:600;font-size:14px;">Open your dashboard &rarr;</a>
+</td></tr>
+<tr><td style="padding:18px 40px;background:#f9fafb;color:#9ca3af;font-size:12px;border-top:1px solid #eef0f3;">Sent via the Dengage Transactional API &middot; showcase portal demo</td></tr>
+</table></td></tr></table></body></html>`,
+
+  order: `<!DOCTYPE html><html><head><meta charset="utf-8"></head><body style="margin:0;padding:0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;background:#f5f6f8;">
+<table width="100%" cellpadding="0" cellspacing="0" style="background:#f5f6f8;padding:32px 12px;"><tr><td align="center">
+<table width="560" cellpadding="0" cellspacing="0" style="max-width:560px;background:#ffffff;border-radius:10px;overflow:hidden;box-shadow:0 1px 2px rgba(0,0,0,0.04);">
+<tr><td style="padding:36px 40px 0;">
+<div style="color:#6b7280;font-size:12px;letter-spacing:0.08em;text-transform:uppercase;">Acme Orders</div>
+<h1 style="margin:12px 0 0;color:#111827;font-size:24px;line-height:1.3;">Thanks {{firstName}}, your order is confirmed.</h1>
+</td></tr>
+<tr><td style="padding:20px 40px 8px;color:#4b5563;font-size:15px;line-height:1.6;">
+<p style="margin:0 0 20px;">Order <strong style="font-family:Menlo,monospace;background:#f3f4f6;padding:2px 6px;border-radius:3px;">#{{orderId}}</strong> is on its way.</p>
+<table width="100%" cellpadding="0" cellspacing="0" style="margin:8px 0 22px;border:1px solid #e5e7eb;border-radius:8px;">
+<tr><td style="padding:14px 16px;color:#6b7280;font-size:12px;text-transform:uppercase;letter-spacing:0.06em;border-bottom:1px solid #e5e7eb;">Summary</td></tr>
+<tr><td style="padding:12px 16px;"><table width="100%"><tr><td style="color:#6b7280;font-size:14px;">Total</td><td align="right" style="color:#111827;font-size:14px;font-weight:600;">{{total}}</td></tr><tr><td style="color:#6b7280;font-size:14px;padding-top:4px;">Estimated delivery</td><td align="right" style="color:#111827;font-size:14px;font-weight:600;padding-top:4px;">{{eta}}</td></tr></table></td></tr>
+</table>
+</td></tr>
+<tr><td style="padding:0 40px 36px;">
+<a href="https://acme.com/orders/{{orderId}}" style="display:inline-block;background:#111827;color:#ffffff;padding:12px 22px;text-decoration:none;border-radius:6px;font-weight:600;font-size:14px;">View order details &rarr;</a>
+</td></tr>
+<tr><td style="padding:18px 40px;background:#f9fafb;color:#9ca3af;font-size:12px;border-top:1px solid #eef0f3;">Sent via the Dengage Transactional API &middot; showcase portal demo</td></tr>
+</table></td></tr></table></body></html>`,
+
+  passwordReset: `<!DOCTYPE html><html><head><meta charset="utf-8"></head><body style="margin:0;padding:0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;background:#f5f6f8;">
+<table width="100%" cellpadding="0" cellspacing="0" style="background:#f5f6f8;padding:32px 12px;"><tr><td align="center">
+<table width="560" cellpadding="0" cellspacing="0" style="max-width:560px;background:#ffffff;border-radius:10px;overflow:hidden;box-shadow:0 1px 2px rgba(0,0,0,0.04);">
+<tr><td style="padding:36px 40px 0;">
+<div style="color:#6b7280;font-size:12px;letter-spacing:0.08em;text-transform:uppercase;">Acme Security</div>
+<h1 style="margin:12px 0 0;color:#111827;font-size:24px;line-height:1.3;">Reset your password</h1>
+</td></tr>
+<tr><td style="padding:20px 40px 8px;color:#4b5563;font-size:15px;line-height:1.6;">
+<p style="margin:0 0 14px;">Hi {{firstName}},</p>
+<p style="margin:0 0 14px;">We received a request to reset the password on your Acme account. Click the button below to choose a new one. This link expires in <strong>{{expiresIn}}</strong>.</p>
+</td></tr>
+<tr><td style="padding:0 40px 18px;">
+<a href="{{resetLink}}" style="display:inline-block;background:#dc2626;color:#ffffff;padding:12px 22px;text-decoration:none;border-radius:6px;font-weight:600;font-size:14px;">Reset password &rarr;</a>
+</td></tr>
+<tr><td style="padding:0 40px 36px;color:#6b7280;font-size:13px;line-height:1.6;">
+<p style="margin:0;">If you didn't request this, you can safely ignore this email - your password hasn't changed.</p>
+</td></tr>
+<tr><td style="padding:18px 40px;background:#f9fafb;color:#9ca3af;font-size:12px;border-top:1px solid #eef0f3;">Sent via the Dengage Transactional API &middot; showcase portal demo</td></tr>
+</table></td></tr></table></body></html>`,
+};
+
 // Dengage DATETIME format per their data-type spec: "YYYY-MM-DD HH:mm" (UTC).
 // NOT ISO 8601 - the T separator and Z suffix will be rejected.
 function dengageDateTime(d: Date): string {
@@ -153,6 +219,14 @@ export const endpoints: DengageEndpoint[] = [
           payloadPath: "content.preheader",
         },
         {
+          name: "html",
+          label: "HTML body (optional)",
+          type: "textarea",
+          placeholder: "Leave empty when using a Template ID. Scenarios pre-fill this with demo HTML.",
+          payloadPath: "content.html",
+          help: "Dengage requires content.templateId OR content.html. Use scenarios below to get ready-made HTML, or paste your own.",
+        },
+        {
           name: "params",
           label: "Personalization variables",
           type: "key-value",
@@ -210,6 +284,7 @@ export const endpoints: DengageEndpoint[] = [
           to: defaultRecipient(),
           subject: "Welcome to Acme, {{firstName}}!",
           preheader: "Here's everything you need to get started.",
+          html: demoHtml.welcome,
           params: { firstName: "Salil", product: "Acme Pro" },
           trackOpen: true,
           trackClick: true,
@@ -223,6 +298,7 @@ export const endpoints: DengageEndpoint[] = [
           to: defaultRecipient(),
           subject: "Your order #A-10042 is confirmed",
           preheader: "Estimated delivery: 3-5 business days",
+          html: demoHtml.order,
           params: {
             firstName: "Salil",
             orderId: "A-10042",
@@ -241,6 +317,7 @@ export const endpoints: DengageEndpoint[] = [
           to: defaultRecipient(),
           subject: "Reset your Acme password",
           preheader: "This link expires in 30 minutes.",
+          html: demoHtml.passwordReset,
           params: {
             firstName: "Salil",
             resetLink: "https://acme.com/reset?token=demo-token-abcxyz",
