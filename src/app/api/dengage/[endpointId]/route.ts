@@ -45,6 +45,7 @@ export async function POST(
     const result = await callDengage({
       method: endpoint.method,
       path: endpoint.path,
+      baseUrl: endpoint.baseUrl,
       body: isBodylessMethod ? undefined : payload,
       query,
     });

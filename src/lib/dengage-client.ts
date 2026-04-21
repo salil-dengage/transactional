@@ -123,10 +123,13 @@ export type DengageCallResult = {
 export async function callDengage(opts: {
   method: string;
   path: string;
+  /** Optional override of the default base URL (useful for endpoints on
+   *  app.dengage.com vs the default api.dengage.com/rest). */
+  baseUrl?: string;
   body?: unknown;
   query?: Record<string, string | number | boolean | undefined>;
 }): Promise<DengageCallResult> {
-  const base = env.dengageBaseUrl();
+  const base = (opts.baseUrl || env.dengageBaseUrl()).replace(/\/$/, "");
   const pathPart = opts.path.startsWith("/") ? opts.path : `/${opts.path}`;
   let url = `${base}${pathPart}`;
   if (opts.query) {

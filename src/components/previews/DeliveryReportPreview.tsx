@@ -1,45 +1,37 @@
 "use client";
 
-type EventType = "DL" | "OP" | "CL" | "SB" | "HB" | "RJ" | "UB" | string;
-
-type DengageEvent = {
-  event_type?: EventType;
-  event_date?: string;
-  bounce_code?: string | null;
-  bounce_text?: string | null;
-  link?: string | null;
-  os?: string | null;
-  browser?: string | null;
-  device?: string | null;
-  ip?: string | null;
-};
-
-type DengageMessage = {
-  group_id?: string;
-  transaction_id?: string;
-  email?: string;
+// Dengage admin-UI 'getTransactionalEmailList' response shape.
+// Older shape (data.result[]) is kept as a defensive fallback below.
+type SendRow = {
+  transactionId?: string;
   subject?: string;
-  event_type?: EventType;
+  email?: string;
+  sendDate?: string;
+  lastActionDate?: string;
+  lastActionType?: string;
+  errorMessage?: string;
+  rcptType?: string;
+  contentName?: string;
+  isReachable?: boolean;
+  tagIds?: unknown[];
+  // Legacy shape fields (kept so an old-style response doesn't crash the UI)
+  event_type?: string;
   event_date?: string;
+  events?: Array<{ event_type?: string }>;
   created_at?: string;
-  from_name?: string;
-  from_address?: string;
-  events?: DengageEvent[];
 };
 
-type DengageReport = {
+type ReportBody = {
   code?: number;
-  message?: string;
-  data?: {
-    result?: DengageMessage[];
-    queryForNextPage?: boolean;
-    affectedRowCount?: number;
-    totalRowCount?: number;
-  };
+  totalCount?: number;
+  resultList?: SendRow[];
+  // Legacy wrapper (old endpoint)
+  data?: { result?: SendRow[]; totalRowCount?: number; queryForNextPage?: boolean };
 };
 
-// Event-type codes per Dengage's transactional schema.
-const EVENT_LABEL: Record<string, string> = {
+// Dengage action-code dictionary. Same codes appear as lastActionType here
+// and as event_type in the older endpoint's response.
+const ACTION_LABEL: Record<string, string> = {
   DL: "Delivered",
   OP: "Opened",
   CL: "Clicked",
@@ -49,8 +41,7 @@ const EVENT_LABEL: Record<string, string> = {
   UB: "Unsubscribed",
   SP: "Spam",
 };
-
-const EVENT_COLOR: Record<string, string> = {
+const ACTION_COLOR: Record<string, string> = {
   DL: "var(--ok)",
   OP: "var(--accent)",
   CL: "var(--accent)",
@@ -63,10 +54,8 @@ const EVENT_COLOR: Record<string, string> = {
 
 function formatTs(s: string | undefined): string {
   if (!s) return "";
-  // Dengage timestamps look like 2026-04-20T19:31:39.337 (no Z). Render compactly.
   return s.replace("T", " ").replace(/\..*$/, "");
 }
-
 function truncate(s: string | undefined, max = 12): string {
   if (!s) return "";
   return s.length > max ? s.slice(0, max) + "…" : s;
@@ -94,7 +83,10 @@ function Stat({
         padding: 14,
       }}
     >
-      <div className="muted" style={{ fontSize: 11, marginBottom: 6, textTransform: "uppercase", letterSpacing: 0.6 }}>
+      <div
+        className="muted"
+        style={{ fontSize: 11, marginBottom: 6, textTransform: "uppercase", letterSpacing: 0.6 }}
+      >
         {label}
       </div>
       <div style={{ fontSize: 22, fontWeight: 700, color: color || "var(--text)" }}>
@@ -105,9 +97,9 @@ function Stat({
   );
 }
 
-function Badge({ type }: { type: EventType | undefined }) {
-  const label = EVENT_LABEL[type ?? ""] || (type ?? "-");
-  const color = EVENT_COLOR[type ?? ""] || "var(--muted)";
+function Badge({ type }: { type: string | undefined }) {
+  const label = ACTION_LABEL[type ?? ""] || (type ?? "-");
+  const color = ACTION_COLOR[type ?? ""] || "var(--muted)";
   return (
     <span
       style={{
@@ -135,9 +127,9 @@ export default function DeliveryReportPreview({
   if (!sendResult) {
     return (
       <div className="muted" style={{ fontSize: 14 }}>
-        Pick a date window and hit <strong style={{ color: "var(--text)" }}>Run</strong> to pull
-        the transactional email report. Delivery / open / click stats and a per-message table
-        will appear here.
+        Pick a time window (and optionally a recipient email) and hit{" "}
+        <strong style={{ color: "var(--text)" }}>Run</strong>. Delivery / open / click stats
+        and a per-message table will appear here.
       </div>
     );
   }
@@ -149,52 +141,55 @@ export default function DeliveryReportPreview({
     );
   }
 
-  const body = sendResult.responseBody as DengageReport;
-  const messages = body?.data?.result || [];
-  const totalRowCount = body?.data?.totalRowCount;
-  const queryForNextPage = body?.data?.queryForNextPage;
+  const body = sendResult.responseBody as ReportBody;
 
-  // Each message has a top-level event_type showing its latest event; sum those for
-  // the summary strip. Also count every child event to show the bigger picture.
-  const msgEventCounts: Record<string, number> = {};
-  const allEventCounts: Record<string, number> = {};
-  for (const m of messages) {
-    const t = m.event_type;
-    if (t) msgEventCounts[t] = (msgEventCounts[t] || 0) + 1;
-    for (const e of m.events || []) {
-      const et = e.event_type;
-      if (et) allEventCounts[et] = (allEventCounts[et] || 0) + 1;
-    }
-  }
+  // The admin-UI endpoint returns { totalCount, resultList }. The older
+  // endpoint returned { data: { result, totalRowCount } }. Accept either.
+  const rows: SendRow[] = body?.resultList || body?.data?.result || [];
+  const totalCount = body?.totalCount ?? body?.data?.totalRowCount ?? rows.length;
 
-  const delivered = msgEventCounts["DL"] || 0;
-  const opened = allEventCounts["OP"] || 0;
-  const clicked = allEventCounts["CL"] || 0;
-  const softBounce = msgEventCounts["SB"] || 0;
-  const hardBounce = msgEventCounts["HB"] || 0;
-  const total = messages.length;
-
-  const openRate = delivered > 0 ? Math.round((opened / delivered) * 1000) / 10 : undefined;
-  const clickRate = delivered > 0 ? Math.round((clicked / delivered) * 1000) / 10 : undefined;
-
-  if (total === 0) {
+  if (rows.length === 0) {
     return (
-      <div className="muted">No messages in this time window. Widen the window (Last 7 / 30 days) and try again.</div>
+      <div className="muted">
+        No sends matched the filter. Widen the window, clear the recipient filter, or check
+        that the date range is in UTC.
+      </div>
     );
   }
+
+  // Group by lastActionType (new shape) / event_type (legacy shape).
+  const counts: Record<string, number> = {};
+  for (const r of rows) {
+    const t = r.lastActionType || r.event_type;
+    if (t) counts[t] = (counts[t] || 0) + 1;
+  }
+
+  const delivered = counts["DL"] || 0;
+  const opened = counts["OP"] || 0;
+  const clicked = counts["CL"] || 0;
+  const softBounce = counts["SB"] || 0;
+  const hardBounce = counts["HB"] || 0;
+
+  const successCount = delivered + opened + clicked; // anything past 'delivered' is also delivered
+  const openRate = successCount > 0 ? Math.round((opened / successCount) * 1000) / 10 : undefined;
+  const clickRate = successCount > 0 ? Math.round((clicked / successCount) * 1000) / 10 : undefined;
 
   return (
     <div>
       <div className="row" style={{ gap: 10, flexWrap: "wrap", marginBottom: 14 }}>
-        <Stat label="Messages" value={total} hint={totalRowCount && totalRowCount > total ? `of ${totalRowCount} total` : undefined} />
+        <Stat
+          label="Messages"
+          value={rows.length}
+          hint={totalCount > rows.length ? `of ${totalCount} total` : undefined}
+        />
         <Stat label="Delivered" value={delivered} color="var(--ok)" />
-        <Stat label="Opens" value={opened} color="var(--accent)" hint={openRate !== undefined ? `${openRate}% of delivered` : undefined} />
-        <Stat label="Clicks" value={clicked} color="var(--accent)" hint={clickRate !== undefined ? `${clickRate}% of delivered` : undefined} />
+        <Stat label="Opens" value={opened} color="var(--accent)" hint={openRate !== undefined ? `${openRate}% of delivered+` : undefined} />
+        <Stat label="Clicks" value={clicked} color="var(--accent)" hint={clickRate !== undefined ? `${clickRate}% of delivered+` : undefined} />
         <Stat label="Soft bounces" value={softBounce} color="var(--warn)" />
         <Stat label="Hard bounces" value={hardBounce} color="var(--err)" />
       </div>
 
-      {queryForNextPage ? (
+      {totalCount > rows.length ? (
         <div
           className="muted"
           style={{
@@ -206,8 +201,7 @@ export default function DeliveryReportPreview({
             marginBottom: 12,
           }}
         >
-          More results available — Dengage paginates at {total} rows. Narrow the window for a
-          fully-scoped report, or extend the portal later to fetch subsequent pages.
+          Showing {rows.length} of {totalCount}. Increase limit or raise offset to fetch more.
         </div>
       ) : null}
 
@@ -234,83 +228,72 @@ export default function DeliveryReportPreview({
         >
           <div>Status</div>
           <div>Recipient / Subject</div>
-          <div>Events</div>
-          <div>Last event</div>
+          <div>Content</div>
+          <div>Last action</div>
           <div>Transaction ID</div>
         </div>
         <div style={{ maxHeight: 420, overflowY: "auto" }}>
-          {messages.slice(0, 50).map((m, i) => (
-            <div
-              key={(m.transaction_id || "") + i}
-              style={{
-                display: "grid",
-                gridTemplateColumns: "max-content 1fr max-content max-content max-content",
-                gap: 12,
-                padding: "10px 14px",
-                borderBottom: "1px solid var(--border)",
-                alignItems: "center",
-                fontSize: 13,
-              }}
-            >
-              <Badge type={m.event_type} />
-              <div style={{ minWidth: 0 }}>
-                <div style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                  {m.email || "-"}
+          {rows.slice(0, 100).map((r, i) => {
+            const action = r.lastActionType || r.event_type;
+            const lastTs = r.lastActionDate || r.event_date || r.sendDate;
+            return (
+              <div
+                key={(r.transactionId || "") + i}
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "max-content 1fr max-content max-content max-content",
+                  gap: 12,
+                  padding: "10px 14px",
+                  borderBottom: "1px solid var(--border)",
+                  alignItems: "center",
+                  fontSize: 13,
+                }}
+              >
+                <Badge type={action} />
+                <div style={{ minWidth: 0 }}>
+                  <div
+                    style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
+                    title={r.email}
+                  >
+                    {r.email || "-"}
+                  </div>
+                  <div
+                    className="muted"
+                    style={{
+                      fontSize: 12,
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                      whiteSpace: "nowrap",
+                    }}
+                    title={r.subject}
+                  >
+                    {r.subject || "-"}
+                  </div>
+                  {r.errorMessage ? (
+                    <div style={{ color: "var(--err)", fontSize: 12, marginTop: 2 }} title={r.errorMessage}>
+                      {truncate(r.errorMessage, 80)}
+                    </div>
+                  ) : null}
+                </div>
+                <div className="muted" style={{ fontSize: 12, whiteSpace: "nowrap" }} title={r.contentName}>
+                  {truncate(r.contentName, 18) || "-"}
+                </div>
+                <div className="muted" style={{ fontFamily: "var(--mono)", fontSize: 12, whiteSpace: "nowrap" }}>
+                  {formatTs(lastTs)}
                 </div>
                 <div
                   className="muted"
-                  style={{
-                    fontSize: 12,
-                    overflow: "hidden",
-                    textOverflow: "ellipsis",
-                    whiteSpace: "nowrap",
-                  }}
+                  style={{ fontFamily: "var(--mono)", fontSize: 12, whiteSpace: "nowrap" }}
+                  title={r.transactionId}
                 >
-                  {m.subject || "-"}
+                  {truncate(r.transactionId, 12)}
                 </div>
               </div>
-              <div style={{ display: "flex", gap: 4, flexWrap: "wrap", justifyContent: "flex-end" }}>
-                {(m.events || []).map((e, j) => (
-                  <span
-                    key={j}
-                    title={
-                      e.event_type === "SB" || e.event_type === "HB"
-                        ? `${EVENT_LABEL[e.event_type ?? ""] || e.event_type}: ${e.bounce_text || ""}`
-                        : EVENT_LABEL[e.event_type ?? ""] || e.event_type
-                    }
-                    style={{
-                      display: "inline-block",
-                      width: 18,
-                      height: 18,
-                      borderRadius: 4,
-                      background: EVENT_COLOR[e.event_type ?? ""] || "var(--muted)",
-                      opacity: 0.85,
-                      fontSize: 10,
-                      lineHeight: "18px",
-                      textAlign: "center",
-                      color: "#000",
-                      fontWeight: 700,
-                    }}
-                  >
-                    {(e.event_type || "?").slice(0, 1)}
-                  </span>
-                ))}
-              </div>
-              <div className="muted" style={{ fontFamily: "var(--mono)", fontSize: 12, whiteSpace: "nowrap" }}>
-                {formatTs(m.event_date)}
-              </div>
-              <div
-                className="muted"
-                style={{ fontFamily: "var(--mono)", fontSize: 12, whiteSpace: "nowrap" }}
-                title={m.transaction_id}
-              >
-                {truncate(m.transaction_id, 12)}
-              </div>
-            </div>
-          ))}
-          {messages.length > 50 ? (
+            );
+          })}
+          {rows.length > 100 ? (
             <div className="muted" style={{ padding: "10px 14px", fontSize: 12 }}>
-              Showing first 50 of {messages.length}. Open Developer view for the full payload.
+              Showing first 100 of {rows.length}. Open Developer view for the full payload.
             </div>
           ) : null}
         </div>

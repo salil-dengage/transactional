@@ -11,7 +11,7 @@ export default function EndpointPage({ params }: { params: { endpointId: string 
   if (!endpoint) notFound();
 
   const defaultPayload = endpoint.defaultPayload ? endpoint.defaultPayload() : {};
-  const baseUrl = env.dengageBaseUrl();
+  const baseUrl = (endpoint.baseUrl || env.dengageBaseUrl()).replace(/\/$/, "");
 
   return (
     <div>
