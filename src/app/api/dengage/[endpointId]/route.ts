@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { getEndpoint } from "@/lib/dengage-registry";
 import { callDengage } from "@/lib/dengage-client";
-import { preSubstituteRawHtmlPayload } from "@/lib/merge-tags";
 import { session, verifySessionToken } from "@/lib/session";
 
 export const runtime = "nodejs";
@@ -32,11 +31,11 @@ export async function POST(
     // For GET/DELETE, Dengage takes filters in the query string, not a body.
     // Route the form payload accordingly so BeginTime/EndTime (and any other
     // GET filters on future endpoints) actually reach the server.
-    // Pre-substitute {{merge-tags}} in raw-HTML sends (no-op for templateId sends).
-    const payload =
-      endpoint.id === "send-transactional-email"
-        ? preSubstituteRawHtmlPayload(body.payload)
-        : body.payload;
+    // Endpoint-specific transforms (merge-tag substitution for raw HTML,
+    // flat -> nested bulk shape, etc.) run here via the registry hook.
+    const payload = endpoint.transformPayload
+      ? endpoint.transformPayload(body.payload)
+      : body.payload;
     const isBodylessMethod = endpoint.method === "GET" || endpoint.method === "DELETE";
     const query =
       isBodylessMethod && payload && typeof payload === "object" && !Array.isArray(payload)

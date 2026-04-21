@@ -1,5 +1,6 @@
 import { env } from "./env";
 import type { FormSchema, FormValues } from "./form-schema";
+import { preSubstituteRawHtmlPayload, transformBulkPayload } from "./merge-tags";
 
 export type EndpointCategory =
   | "messaging"
@@ -68,6 +69,14 @@ export interface DengageEndpoint {
   previewKind?: PreviewKind;
   /** Starter JSON body shown in Developer view. */
   defaultPayload?: () => unknown;
+  /**
+   * Optional server-side transform applied to the form payload just before
+   * it's sent to Dengage. Use for:
+   *   - Flattening a demo-friendly flat form into a nested Dengage shape
+   *   - Client-side merge-tag substitution for raw-HTML sends
+   * Runs in the proxy route, never in the browser.
+   */
+  transformPayload?: (payload: unknown) => unknown;
   notes?: string[];
 }
 
@@ -345,6 +354,183 @@ export const endpoints: DengageEndpoint[] = [
       "content.fromNameId is a UUID from your Senders config, not a free-text From name. Leave blank to use the template's default sender.",
       "If Dengage rejects 'content.params' in your workspace, adjust the key in Developer view - not all workspaces use the same merge-variable field name.",
     ],
+    transformPayload: preSubstituteRawHtmlPayload,
+  },
+
+  // 1b) SEND TRANSACTIONAL BULK EMAIL
+  {
+    id: "send-transactional-bulk-email",
+    name: "Send Transactional Bulk Email",
+    description:
+      "Send one content block to many recipients in a single call. Up to 50 content batches per request and up to 100 recipients per batch. Ideal for order digests, notification fan-outs, or demoing multi-recipient throughput.",
+    category: "messaging",
+    tags: ["email", "transactional", "bulk"],
+    docsUrl: "https://dev.dengage.com/reference/sendtransactionalbulkemail",
+    method: "POST",
+    path: "/transactional/email/bulk",
+    previewKind: "email",
+    form: {
+      // Flat form; transformed into Dengage's nested emailList[].props[] shape
+      // server-side by transformBulkPayload.
+      fields: [
+        {
+          name: "recipients",
+          label: "Recipients",
+          type: "textarea",
+          required: true,
+          placeholder: "one@example.com\ntwo@example.com\nthree@example.com",
+          help: "One email per line (or comma / semicolon separated). Up to 100 per batch.",
+          default: defaultRecipient(),
+        },
+        {
+          name: "templateId",
+          label: "Template ID (optional)",
+          type: "text",
+          placeholder: "UUID from Dengage > Transactional > Templates",
+          help: "Provide this OR an HTML body. If both are set, Dengage uses the template.",
+        },
+        {
+          name: "fromNameId",
+          label: "From-name ID (optional)",
+          type: "text",
+          placeholder: "UUID from Dengage > Senders",
+        },
+        {
+          name: "subject",
+          label: "Subject",
+          type: "text",
+          placeholder: "Applies to all recipients in this batch",
+        },
+        {
+          name: "preheader",
+          label: "Preheader (optional)",
+          type: "text",
+        },
+        {
+          name: "html",
+          label: "HTML body (optional)",
+          type: "textarea",
+          placeholder: "Leave empty if using a Template ID. Scenarios pre-fill this.",
+          help: "Dengage needs templateId OR html. Scenarios load ready-made HTML.",
+        },
+        {
+          name: "params",
+          label: "Personalization variables",
+          type: "key-value",
+          keyLabel: "Variable name",
+          valueLabel: "Value",
+          help: "Applied to all recipients. For raw-HTML sends the portal substitutes {{tags}} before dispatch (shared across recipients).",
+          default: { firstName: "there" },
+        },
+        {
+          name: "replyTo",
+          label: "Reply-To (optional)",
+          type: "email",
+          placeholder: "reply@example.com",
+        },
+        {
+          name: "trackOpen",
+          label: "Track opens",
+          type: "boolean",
+          default: true,
+        },
+        {
+          name: "trackClick",
+          label: "Track clicks",
+          type: "boolean",
+          default: false,
+        },
+        {
+          name: "showAllErrors",
+          label: "Return all per-recipient errors",
+          type: "boolean",
+          default: true,
+          help: "When true, Dengage surfaces failures for every recipient; otherwise only the first.",
+        },
+      ],
+    },
+    scenarios: [
+      {
+        id: "welcome-bulk",
+        name: "Welcome - 3 new signups",
+        description: "Same welcome email to three recipients.",
+        values: {
+          recipients: [defaultRecipient(), defaultRecipient().replace("@", "+alice@"), defaultRecipient().replace("@", "+bob@")].join("\n"),
+          subject: "Welcome to Acme, {{firstName}}!",
+          preheader: "Here's everything you need to get started.",
+          html: demoHtml.welcome,
+          params: { firstName: "there", product: "Acme Pro" },
+          trackOpen: true,
+          trackClick: true,
+          showAllErrors: true,
+        },
+      },
+      {
+        id: "order-batch",
+        name: "Order dispatch digest",
+        description: "Three customers whose orders just shipped.",
+        values: {
+          recipients: [defaultRecipient(), defaultRecipient().replace("@", "+customer2@"), defaultRecipient().replace("@", "+customer3@")].join("\n"),
+          subject: "Your order #A-10042 has shipped",
+          preheader: "Track it in your dashboard.",
+          html: demoHtml.order,
+          params: {
+            firstName: "there",
+            orderId: "A-10042",
+            total: "$129.00",
+            eta: "3-5 business days",
+          },
+          trackOpen: true,
+          trackClick: true,
+          showAllErrors: true,
+        },
+      },
+      {
+        id: "reset-batch",
+        name: "Password-reset batch",
+        description: "Multiple recipients, same reset flow.",
+        values: {
+          recipients: [defaultRecipient(), defaultRecipient().replace("@", "+reset1@"), defaultRecipient().replace("@", "+reset2@")].join("\n"),
+          subject: "Reset your Acme password",
+          preheader: "This link expires in 30 minutes.",
+          html: demoHtml.passwordReset,
+          params: {
+            firstName: "there",
+            resetLink: "https://acme.com/reset?token=demo-token-abcxyz",
+            expiresIn: "30 minutes",
+          },
+          trackOpen: true,
+          trackClick: false,
+          showAllErrors: true,
+        },
+      },
+    ],
+    defaultPayload: () => ({
+      emailList: [
+        {
+          content: {
+            templateId: "REPLACE_WITH_TEMPLATE_ID",
+            subject: "Hello from the Dengage showcase portal",
+            preheader: "A quick note from the bulk-send demo.",
+          },
+          props: [
+            { send: { to: defaultRecipient() }, reporting: { trackOpen: true, trackClick: false } },
+            {
+              send: { to: defaultRecipient().replace("@", "+2@") },
+              reporting: { trackOpen: true, trackClick: false },
+            },
+          ],
+        },
+      ],
+      showAllErrors: true,
+    }),
+    notes: [
+      "The form is flat for demo clarity; the portal builds Dengage's nested emailList[].props[] shape server-side. Switch to Developer view to see the exact JSON that was sent.",
+      "One content batch per request in this form (simplest case). To demo multiple different contents in one call, hand-edit the JSON in Developer view.",
+      "Raw-HTML sends share one rendered body across all recipients (same merge-tag values). For per-recipient personalization, use a Dengage templateId - Dengage's engine does that per-send.",
+      "Response returns one groupId per content batch - useful for correlating subsequent report queries.",
+    ],
+    transformPayload: transformBulkPayload,
   },
 
   // 2) TRANSACTIONAL EMAIL REPORT
