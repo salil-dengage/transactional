@@ -200,13 +200,29 @@ export function transformContactUpsertPayload(flat: unknown): unknown {
  * shape so this is sufficient; power users can hand-edit the columns/rows
  * arrays directly in Developer view.
  */
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * Route table-identifier values into tableId vs tableName based on shape.
+ * Dengage rejects non-UUID values passed as tableId with a type-conversion
+ * error, so a rep typing "product" in the tableId field would break.
+ * A UUID-shaped string goes to tableId; anything else goes to tableName.
+ */
+function routeTableIdentifier(out: Record<string, unknown>, raw: unknown): void {
+  if (typeof raw !== "string") return;
+  const s = raw.trim();
+  if (!s) return;
+  if (UUID_RE.test(s)) out.tableId = s;
+  else out.tableName = s;
+}
+
 export function transformUpsertDataV2Payload(flat: unknown): unknown {
   if (!flat || typeof flat !== "object" || Array.isArray(flat)) return flat;
   const f = flat as Record<string, unknown>;
 
   const out: Record<string, unknown> = {};
-  if (typeof f.tableId === "string" && f.tableId) out.tableId = f.tableId;
-  if (typeof f.tableName === "string" && f.tableName) out.tableName = f.tableName;
+  routeTableIdentifier(out, f.tableId);
+  routeTableIdentifier(out, f.tableName);
 
   const csv = typeof f.csvContent === "string" ? f.csvContent : "";
   if (csv.trim().length > 0) {
@@ -346,8 +362,8 @@ export function transformCustomEventPayload(flat: unknown): unknown {
   const f = flat as Record<string, unknown>;
 
   const out: Record<string, unknown> = {};
-  if (typeof f.tableName === "string" && f.tableName) out.tableName = f.tableName;
-  if (typeof f.tableId === "string" && f.tableId) out.tableId = f.tableId;
+  routeTableIdentifier(out, f.tableId);
+  routeTableIdentifier(out, f.tableName);
 
   const attrs = Array.isArray(f.attributes)
     ? (f.attributes as Array<{ name?: string; type?: string; value?: string }>)

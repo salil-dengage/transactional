@@ -62,7 +62,11 @@ export default function DemoClient({ endpoint }: { endpoint: EndpointProps }) {
     // Preserve whatever the rep has already typed (especially templateId that
     // the scenario doesn't set) - scenarios override ONLY the keys they
     // specify. This keeps multi-scenario exploration frictionless.
-    const merged = { ...values, ...s.values };
+    //
+    // Placeholders are resolved per click so fields like event_date and
+    // event_id get fresh values every time ($$NOW$$ / $$UUID$$ etc).
+    const resolved = resolvePlaceholders(s.values) as FormValues;
+    const merged = { ...values, ...resolved };
     updateValues(merged);
   }
 
@@ -419,4 +423,40 @@ function actionLabel(method: string): string {
   if (method === "DELETE") return "Delete";
   if (method === "PUT") return "Update";
   return "Send";
+}
+
+// Replace special placeholder strings in a scenario's values so every
+// scenario click gets fresh timestamps / IDs, not values frozen at
+// module-load time.
+//   $$NOW$$   -> current UTC datetime in Dengage format (YYYY-MM-DD HH:mm:ss)
+//   $$TODAY$$ -> current UTC date (YYYY-MM-DD)
+//   $$UUID$$  -> a fresh random UUID (crypto.randomUUID when available)
+function resolvePlaceholders(value: unknown): unknown {
+  if (typeof value === "string") {
+    if (value === "$$NOW$$") {
+      const d = new Date();
+      const pad = (n: number) => String(n).padStart(2, "0");
+      return `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())} ${pad(
+        d.getUTCHours(),
+      )}:${pad(d.getUTCMinutes())}:${pad(d.getUTCSeconds())}`;
+    }
+    if (value === "$$TODAY$$") {
+      return new Date().toISOString().slice(0, 10);
+    }
+    if (value === "$$UUID$$") {
+      const c = (globalThis as { crypto?: { randomUUID?: () => string } }).crypto;
+      if (c?.randomUUID) return c.randomUUID();
+      return "id_" + Math.random().toString(36).slice(2, 12);
+    }
+    return value;
+  }
+  if (Array.isArray(value)) return value.map(resolvePlaceholders);
+  if (value && typeof value === "object") {
+    const out: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
+      out[k] = resolvePlaceholders(v);
+    }
+    return out;
+  }
+  return value;
 }
