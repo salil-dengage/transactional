@@ -28,10 +28,21 @@ export async function POST(
   }
 
   try {
+    // For GET/DELETE, Dengage takes filters in the query string, not a body.
+    // Route the form payload accordingly so BeginTime/EndTime (and any other
+    // GET filters on future endpoints) actually reach the server.
+    const payload = body.payload;
+    const isBodylessMethod = endpoint.method === "GET" || endpoint.method === "DELETE";
+    const query =
+      isBodylessMethod && payload && typeof payload === "object" && !Array.isArray(payload)
+        ? (payload as Record<string, string | number | boolean | undefined>)
+        : undefined;
+
     const result = await callDengage({
       method: endpoint.method,
       path: endpoint.path,
-      body: body.payload,
+      body: isBodylessMethod ? undefined : payload,
+      query,
     });
     return NextResponse.json(result);
   } catch (err) {
