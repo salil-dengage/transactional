@@ -1,0 +1,27 @@
+# Fly.io deployment config.
+# First run:
+#   fly launch --copy-config --no-deploy
+#   fly secrets set DENGAGE_USERKEY=... DENGAGE_PASSWORD=... PORTAL_PASSWORD=... SESSION_SECRET=... DEFAULT_DEMO_RECIPIENT=...
+#   fly ips allocate-v4        # dedicated public IPv4 — this is the IP you give Dengage to whitelist
+#   fly deploy
+
+app = "dengage-api-showcase"
+primary_region = "iad"
+
+[build]
+
+[env]
+  NODE_ENV = "production"
+  PORT = "3000"
+
+[http_service]
+  internal_port = 3000
+  force_https = true
+  auto_stop_machines = "stop"
+  auto_start_machines = true
+  min_machines_running = 1
+
+[[vm]]
+  cpu_kind = "shared"
+  cpus = 1
+  memory_mb = 512
