@@ -912,7 +912,7 @@ export const endpoints: DengageEndpoint[] = [
       },
     ],
     defaultPayload: () => ({
-      columns: ["email", "name", "surname", "email_permission"],
+      columns: ["contact_key", "email", "name", "surname", "email_permission"],
       contactDatas: [
         {
           contact_key: defaultRecipient(),
