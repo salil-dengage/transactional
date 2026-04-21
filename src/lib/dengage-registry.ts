@@ -75,12 +75,19 @@ export interface DengageEndpoint {
 
 const defaultRecipient = () => env.defaultDemoRecipient() || "demo@example.com";
 
-function isoDaysAgo(days: number): string {
-  const d = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
-  return d.toISOString().replace(/\.\d{3}Z$/, "Z");
+// Dengage DATETIME format per their data-type spec: "YYYY-MM-DD HH:mm" (UTC).
+// NOT ISO 8601 - the T separator and Z suffix will be rejected.
+function dengageDateTime(d: Date): string {
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())} ${pad(
+    d.getUTCHours(),
+  )}:${pad(d.getUTCMinutes())}`;
 }
-function isoNow(): string {
-  return new Date().toISOString().replace(/\.\d{3}Z$/, "Z");
+function dengageDateTimeDaysAgo(days: number): string {
+  return dengageDateTime(new Date(Date.now() - days * 24 * 60 * 60 * 1000));
+}
+function dengageDateTimeNow(): string {
+  return dengageDateTime(new Date());
 }
 
 export const endpoints: DengageEndpoint[] = [
@@ -226,16 +233,16 @@ export const endpoints: DengageEndpoint[] = [
           label: "Begin time",
           type: "text",
           required: true,
-          placeholder: "YYYY-MM-DDTHH:mm:ssZ",
-          help: "Start of the reporting window. ISO 8601 UTC (e.g. 2026-04-14T00:00:00Z).",
+          placeholder: "YYYY-MM-DD HH:mm",
+          help: "Start of the reporting window. Dengage DATETIME format, UTC (e.g. 2026-04-14 00:00).",
         },
         {
           name: "EndTime",
           label: "End time",
           type: "text",
           required: true,
-          placeholder: "YYYY-MM-DDTHH:mm:ssZ",
-          help: "End of the reporting window. ISO 8601 UTC.",
+          placeholder: "YYYY-MM-DD HH:mm",
+          help: "End of the reporting window. Dengage DATETIME format, UTC.",
         },
       ],
     },
@@ -243,23 +250,26 @@ export const endpoints: DengageEndpoint[] = [
       {
         id: "last-24h",
         name: "Last 24 hours",
-        values: { BeginTime: isoDaysAgo(1), EndTime: isoNow() },
+        values: { BeginTime: dengageDateTimeDaysAgo(1), EndTime: dengageDateTimeNow() },
       },
       {
         id: "last-7d",
         name: "Last 7 days",
-        values: { BeginTime: isoDaysAgo(7), EndTime: isoNow() },
+        values: { BeginTime: dengageDateTimeDaysAgo(7), EndTime: dengageDateTimeNow() },
       },
       {
         id: "last-30d",
         name: "Last 30 days",
-        values: { BeginTime: isoDaysAgo(30), EndTime: isoNow() },
+        values: { BeginTime: dengageDateTimeDaysAgo(30), EndTime: dengageDateTimeNow() },
       },
     ],
-    defaultPayload: () => ({ BeginTime: isoDaysAgo(1), EndTime: isoNow() }),
+    defaultPayload: () => ({
+      BeginTime: dengageDateTimeDaysAgo(1),
+      EndTime: dengageDateTimeNow(),
+    }),
     notes: [
       "BeginTime and EndTime are sent as query-string parameters on this GET request.",
-      "Dengage returned '400: BeginTime must be filled' during diagnostics - this form enforces both.",
+      "Dengage's DATETIME format is 'YYYY-MM-DD HH:mm' UTC - not ISO 8601.",
       "If the report is empty, widen the time window with one of the scenarios above.",
     ],
   },
