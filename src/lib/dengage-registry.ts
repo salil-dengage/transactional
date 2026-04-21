@@ -696,11 +696,15 @@ export const endpoints: DengageEndpoint[] = [
       EndTime: dengageDateTimeNow(),
     }),
     notes: [
-      "Filter precedence: groupId > transactionId > email > tag. Setting a higher-precedence filter makes the lower ones ignored.",
+      "Filter precedence per Dengage docs: groupId > transactionId > email > tag. Setting a higher-precedence filter should make the lower ones ignored.",
       "email and tag are mutually exclusive - if both are set, email is used and tag is ignored.",
       "When filtering by email or tag, BeginTime and EndTime are required. Max window is 7 days.",
       "Dengage's DATETIME format is 'YYYY-MM-DD HH:mm' UTC - not ISO 8601. The T separator and Z suffix will be rejected.",
       "All parameters go on the query string of this GET request - see the full URL in Developer view.",
+      "Known Dengage behaviours we've observed (raise with Dengage support if they affect your demo):",
+      "  * The transactionId query parameter is silently ignored on this account - a valid ID from a prior send returns the time-range fallback instead of the expected single record.",
+      "  * Sends made via POST /transactional/email on the REST API do not appear in this report's result set, even when filtered by their returned groupId or recipient email. The Dengage admin UI shows them, so the data exists, but it isn't exposed by this documented REST endpoint for our authenticated account.",
+      "  * The report does return account-scoped monitoring traffic (mustafa@dengage.com 'RestApi Test Email' pings), so the endpoint itself works - the issue is which sends it indexes.",
     ],
   },
 ];
