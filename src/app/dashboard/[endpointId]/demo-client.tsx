@@ -59,7 +59,10 @@ export default function DemoClient({ endpoint }: { endpoint: EndpointProps }) {
 
   function applyScenario(s: Scenario) {
     if (!endpoint.form) return;
-    const merged = { ...seedValues(endpoint.form), ...s.values };
+    // Preserve whatever the rep has already typed (especially templateId that
+    // the scenario doesn't set) - scenarios override ONLY the keys they
+    // specify. This keeps multi-scenario exploration frictionless.
+    const merged = { ...values, ...s.values };
     updateValues(merged);
   }
 

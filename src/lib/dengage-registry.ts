@@ -262,8 +262,10 @@ export const endpoints: DengageEndpoint[] = [
       reporting: { trackOpen: true, trackClick: false },
     }),
     notes: [
+      "Template ID is required. Scenarios don't set it - enter yours in the Template ID field first, then click a scenario to fill in subject/variables/etc. around it.",
+      "Without a templateId, Dengage requires content.html instead (raw HTML body) and will reject with 'Html content must be filled'.",
       "Body is nested - send{}, content{}, reporting{}, with replyTo at the top level. The form is flat for demo clarity; the JSON in Developer view is what Dengage actually receives.",
-      "Dengage expects content.fromNameId (a UUID from your Senders config), not a free-text From name. Leave blank to use the template's default sender.",
+      "content.fromNameId is a UUID from your Senders config, not a free-text From name. Leave blank to use the template's default sender.",
       "If Dengage rejects 'content.params' in your workspace, adjust the key in Developer view - not all workspaces use the same merge-variable field name.",
     ],
   },

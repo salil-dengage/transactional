@@ -1,6 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
-import { authModeProbe, currentAuthMode, loginDiagnostic } from "@/lib/dengage-client";
+import {
+  authModeProbe,
+  currentAuthMode,
+  loginDiagnostic,
+  reportPathProbe,
+} from "@/lib/dengage-client";
 import { env } from "@/lib/env";
 import { session, verifySessionToken } from "@/lib/session";
 
@@ -32,6 +37,15 @@ export async function GET(_req: NextRequest) {
     out.authProbe = await authModeProbe("/transactional/email");
   } catch (e) {
     out.authProbe = { error: (e as Error).message };
+  }
+
+  // 2b. Probe several candidate paths for the Report endpoint with NO query
+  //     params. Whichever returns 200 (not 400 'BeginTime must be filled') is
+  //     the actual report URL.
+  try {
+    out.reportPathProbe = await reportPathProbe();
+  } catch (e) {
+    out.reportPathProbe = { error: (e as Error).message };
   }
 
   // 3. Outbound IP (what Dengage sees for whitelisting).

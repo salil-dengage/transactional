@@ -317,6 +317,64 @@ export function currentAuthMode(): AuthMode {
 }
 
 /**
+ * Probe several candidate paths for the Get Transactional Email Report
+ * endpoint with NO query params. Interpretation:
+ *   - 200        -> report returned with no args (this is the docs' example)
+ *   - 400        -> path exists but needs params (NOT the summary report;
+ *                   probably 'list sends in a window')
+ *   - 404        -> path doesn't exist
+ *   - 405        -> method not allowed (not a GET endpoint)
+ */
+export async function reportPathProbe() {
+  const token = await getToken();
+  const candidates = [
+    "/transactional/email/report",
+    "/transactional/email/reports",
+    "/transactional/report",
+    "/transactional/reports",
+    "/transactional/email/summary",
+    "/transactional/email/stats",
+    "/reports/transactional/email",
+    "/report/transactional/email",
+    "/transactional/reporting",
+    "/transactional/email/reporting",
+    "/gettransactionalemailreport",
+  ];
+  const results: Array<Record<string, unknown>> = [];
+  for (const path of candidates) {
+    const url = `${env.dengageBaseUrl()}${path}`;
+    const started = Date.now();
+    try {
+      const res = await fetch(url, {
+        method: "GET",
+        headers: {
+          accept: "application/json",
+          authorization: authHeader(token, authMode),
+        },
+        cache: "no-store",
+      });
+      const text = await res.text();
+      let parsed: unknown = text;
+      try {
+        parsed = text ? JSON.parse(text) : null;
+      } catch {
+        // raw text
+      }
+      results.push({
+        path,
+        status: res.status,
+        durationMs: Date.now() - started,
+        looksLikeValidPath: res.status !== 404 && res.status !== 405,
+        responseBodyRedacted: redactDeep(parsed),
+      });
+    } catch (e) {
+      results.push({ path, error: (e as Error).message });
+    }
+  }
+  return results;
+}
+
+/**
  * Probe several candidate paths for the Send Transactional Email endpoint.
  * Sends an empty {} body to each. Interpretation:
  *   - 404        -> path doesn't exist
