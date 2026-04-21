@@ -1,47 +1,23 @@
-# Fly.io deployment config.
+# fly.toml app configuration file generated for dengage-api-showcase on 2026-04-21T05:37:08Z
 #
-# Recommended (CLI) path — the GitHub integration sometimes ignores the
-# existing fly.toml and tries to auto-detect:
+# See https://fly.io/docs/reference/configuration/ for information about how to use this file.
 #
-#   1. fly launch --copy-config --no-deploy --name <pick-a-unique-name>
-#   2. fly secrets set \
-#        DENGAGE_USERKEY=... \
-#        DENGAGE_PASSWORD=... \
-#        PORTAL_PASSWORD=... \
-#        SESSION_SECRET=$(openssl rand -hex 32) \
-#        DEFAULT_DEMO_RECIPIENT=salil.gupta@dengage.com
-#   3. fly ips allocate-v4        # dedicated public IPv4 — whitelist this on Dengage
-#   4. fly deploy
-#
-# NOTE: change `app` below to something globally unique before your first
-# launch. Fly app names share one global namespace — if this one is taken,
-# deploys fail before anything is built.
 
-app = "dengage-api-showcase"
-primary_region = "iad"
+app = 'dengage-api-showcase'
+primary_region = 'ams'
 
 [build]
-  dockerfile = "Dockerfile"
-
-[env]
-  NODE_ENV = "production"
-  PORT = "3000"
 
 [http_service]
   internal_port = 3000
   force_https = true
-  auto_stop_machines = "stop"
+  auto_stop_machines = 'stop'
   auto_start_machines = true
-  min_machines_running = 1
-
-  [[http_service.checks]]
-    interval = "30s"
-    timeout = "5s"
-    grace_period = "10s"
-    method = "GET"
-    path = "/api/health"
+  min_machines_running = 0
+  processes = ['app']
 
 [[vm]]
-  cpu_kind = "shared"
+  memory = '1gb'
+  cpu_kind = 'shared'
   cpus = 1
   memory_mb = 512
