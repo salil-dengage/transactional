@@ -101,7 +101,9 @@ export const endpoints: DengageEndpoint[] = [
     tags: ["email", "transactional"],
     docsUrl: "https://dev.dengage.com/reference/sendtransactionalemail",
     method: "POST",
-    path: "/sendtransactionalemail",
+    // GET and POST on the same resource: GET /transactional/email returns the
+    // report; POST /transactional/email sends a new transactional email.
+    path: "/transactional/email",
     previewKind: "email",
     form: {
       fields: [
@@ -148,6 +150,22 @@ export const endpoints: DengageEndpoint[] = [
           help: "Key-value pairs passed to the template (e.g. firstName = Salil).",
           default: { firstName: "Salil" },
         },
+        {
+          name: "trackOpen",
+          label: "Track opens",
+          type: "boolean",
+          payloadPath: "reporting.trackOpen",
+          default: true,
+          help: "Dengage reports when the recipient opens the email.",
+        },
+        {
+          name: "trackClick",
+          label: "Track clicks",
+          type: "boolean",
+          payloadPath: "reporting.trackClick",
+          default: false,
+          help: "Dengage rewrites links to capture click-through events.",
+        },
       ],
     },
     scenarios: [
@@ -161,6 +179,8 @@ export const endpoints: DengageEndpoint[] = [
           fromEmail: "welcome@acme.com",
           subject: "Welcome to Acme, {{firstName}}!",
           params: { firstName: "Salil", product: "Acme Pro" },
+          trackOpen: true,
+          trackClick: true,
         },
       },
       {
@@ -178,6 +198,8 @@ export const endpoints: DengageEndpoint[] = [
             total: "$129.00",
             eta: "3-5 business days",
           },
+          trackOpen: true,
+          trackClick: true,
         },
       },
       {
@@ -194,6 +216,8 @@ export const endpoints: DengageEndpoint[] = [
             resetLink: "https://acme.com/reset?token=demo-token-abcxyz",
             expiresIn: "30 minutes",
           },
+          trackOpen: true,
+          trackClick: false,
         },
       },
     ],
@@ -204,6 +228,7 @@ export const endpoints: DengageEndpoint[] = [
       fromName: "Dengage Demo",
       fromEmail: "no-reply@yourdomain.com",
       params: { firstName: "Prospect" },
+      reporting: { trackOpen: true, trackClick: false },
     }),
     notes: [
       "Grab the templateId from the Dengage UI under Transactional > Templates and paste it into the field.",

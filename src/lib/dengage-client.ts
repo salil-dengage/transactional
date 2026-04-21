@@ -315,3 +315,60 @@ export async function authModeProbe(path = "/transactional/email") {
 export function currentAuthMode(): AuthMode {
   return authMode;
 }
+
+/**
+ * Probe several candidate paths for the Send Transactional Email endpoint.
+ * Sends an empty {} body to each. Interpretation:
+ *   - 404        -> path doesn't exist
+ *   - 405        -> path exists but doesn't accept POST
+ *   - 400        -> path exists, accepts POST, just complained about the
+ *                   empty body - THIS IS THE RIGHT PATH
+ *   - 200/201    -> accepted (don't expect, empty body)
+ * Empty body is safe; Dengage can't send an email without recipient/template.
+ */
+export async function sendPathProbe() {
+  const token = await getToken();
+  const candidates = [
+    "/transactional/email",
+    "/transactional/email/send",
+    "/transactional/send",
+    "/sendTransactionalEmail",
+    "/sendtransactionalemail",
+    "/send/transactional/email",
+    "/email/transactional/send",
+  ];
+  const results: Array<Record<string, unknown>> = [];
+  for (const path of candidates) {
+    const url = `${env.dengageBaseUrl()}${path}`;
+    const started = Date.now();
+    try {
+      const res = await fetch(url, {
+        method: "POST",
+        headers: {
+          accept: "application/json",
+          "content-type": "application/json",
+          authorization: authHeader(token, authMode),
+        },
+        body: "{}",
+        cache: "no-store",
+      });
+      const text = await res.text();
+      let parsed: unknown = text;
+      try {
+        parsed = text ? JSON.parse(text) : null;
+      } catch {
+        // raw text
+      }
+      results.push({
+        path,
+        status: res.status,
+        durationMs: Date.now() - started,
+        looksLikeValidPath: res.status >= 400 && res.status < 500 && res.status !== 404 && res.status !== 405,
+        responseBodyRedacted: redactDeep(parsed),
+      });
+    } catch (e) {
+      results.push({ path, error: (e as Error).message });
+    }
+  }
+  return results;
+}
