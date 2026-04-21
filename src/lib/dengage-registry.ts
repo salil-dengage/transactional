@@ -357,17 +357,17 @@ export const endpoints: DengageEndpoint[] = [
     transformPayload: preSubstituteRawHtmlPayload,
   },
 
-  // 1b) SEND TRANSACTIONAL BULK EMAIL
+  // 1b) SEND TRANSACTIONAL BULK EMAIL (V2)
   {
     id: "send-transactional-bulk-email",
-    name: "Send Transactional Bulk Email",
+    name: "Send Transactional Bulk Email (V2)",
     description:
-      "Send one content block to many recipients in a single call. Up to 50 content batches per request and up to 100 recipients per batch. Ideal for order digests, notification fan-outs, or demoing multi-recipient throughput.",
+      "Send one content block to many recipients in a single call. V2 adds multi-recipient CC/BCC lists with per-address tracking in the response. Up to 50 content batches per request and up to 100 recipients per batch.",
     category: "messaging",
-    tags: ["email", "transactional", "bulk"],
-    docsUrl: "https://dev.dengage.com/reference/sendtransactionalbulkemail",
+    tags: ["email", "transactional", "bulk", "v2"],
+    docsUrl: "https://dev.dengage.com/reference/sendtransactionalbulkemailv2",
     method: "POST",
-    path: "/transactional/email/bulk",
+    path: "/transactional/email/bulkV2",
     previewKind: "email",
     form: {
       // Flat form; transformed into Dengage's nested emailList[].props[] shape
@@ -375,12 +375,26 @@ export const endpoints: DengageEndpoint[] = [
       fields: [
         {
           name: "recipients",
-          label: "Recipients",
+          label: "Recipients (To)",
           type: "textarea",
           required: true,
           placeholder: "one@example.com\ntwo@example.com\nthree@example.com",
           help: "One email per line (or comma / semicolon separated). Up to 100 per batch.",
           default: defaultRecipient(),
+        },
+        {
+          name: "cc",
+          label: "CC list (optional)",
+          type: "textarea",
+          placeholder: "manager@example.com\nops@example.com",
+          help: "V2 feature: send one email with multiple CCs. One per line (or comma-separated). Applied to every recipient.",
+        },
+        {
+          name: "bcc",
+          label: "BCC list (optional)",
+          type: "textarea",
+          placeholder: "audit@example.com",
+          help: "V2 feature: multiple BCCs with per-address tracking in the response.",
         },
         {
           name: "templateId",
@@ -514,7 +528,13 @@ export const endpoints: DengageEndpoint[] = [
             preheader: "A quick note from the bulk-send demo.",
           },
           props: [
-            { send: { to: defaultRecipient() }, reporting: { trackOpen: true, trackClick: false } },
+            {
+              send: {
+                to: defaultRecipient(),
+                ccList: ["manager@example.com"],
+              },
+              reporting: { trackOpen: true, trackClick: false },
+            },
             {
               send: { to: defaultRecipient().replace("@", "+2@") },
               reporting: { trackOpen: true, trackClick: false },
@@ -525,10 +545,11 @@ export const endpoints: DengageEndpoint[] = [
       showAllErrors: true,
     }),
     notes: [
+      "Endpoint is V2: same request structure as V1 with added support for multi-CC / multi-BCC (ccList / bccList arrays) and per-address tracking in the response.",
       "The form is flat for demo clarity; the portal builds Dengage's nested emailList[].props[] shape server-side. Switch to Developer view to see the exact JSON that was sent.",
       "One content batch per request in this form (simplest case). To demo multiple different contents in one call, hand-edit the JSON in Developer view.",
       "Raw-HTML sends share one rendered body across all recipients (same merge-tag values). For per-recipient personalization, use a Dengage templateId - Dengage's engine does that per-send.",
-      "Response returns one groupId per content batch - useful for correlating subsequent report queries.",
+      "Response returns one groupId per content batch and per-address tracking IDs for every To/CC/BCC - useful for correlating subsequent report queries.",
     ],
     transformPayload: transformBulkPayload,
   },

@@ -94,10 +94,25 @@ export function transformBulkPayload(flat: unknown): unknown {
   // Build props from recipients (one prop per recipient)
   const trackOpen = f.trackOpen !== false;
   const trackClick = f.trackClick === true;
-  const props = recipients.map((email) => ({
-    send: { to: email },
-    reporting: { trackOpen, trackClick },
-  }));
+
+  // Parse optional cc/bcc lists (same format as recipients: one per line or
+  // comma/semicolon separated). V2's enhanced model; safely ignored on V1.
+  const ccList = typeof f.cc === "string"
+    ? f.cc.split(/[\n,;]+/).map((s) => s.trim()).filter(Boolean)
+    : [];
+  const bccList = typeof f.bcc === "string"
+    ? f.bcc.split(/[\n,;]+/).map((s) => s.trim()).filter(Boolean)
+    : [];
+
+  const props = recipients.map((email) => {
+    const send: Record<string, unknown> = { to: email };
+    if (ccList.length > 0) send.ccList = ccList;
+    if (bccList.length > 0) send.bccList = bccList;
+    return {
+      send,
+      reporting: { trackOpen, trackClick },
+    };
+  });
 
   const emailListEntry: Record<string, unknown> = { content, props };
   if (typeof f.replyTo === "string" && f.replyTo) emailListEntry.replyTo = f.replyTo;
