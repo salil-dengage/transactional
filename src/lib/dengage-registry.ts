@@ -558,17 +558,19 @@ export const endpoints: DengageEndpoint[] = [
     transformPayload: transformBulkPayload,
   },
 
-  // 2) TRANSACTIONAL EMAIL REPORT
-  //    Public REST API: GET /transactional/email with BeginTime + EndTime.
-  //    Returns transactional sends in the window with delivery / open /
-  //    click metadata per message. Only uses documented endpoints -
-  //    app.dengage.com admin-UI APIs are intentionally NOT used in the
-  //    showcase portal.
+  // 2) GET TRANSACTIONAL EMAIL REPORT
+  //    GET /transactional/email - documented public REST endpoint.
+  //    Supports lookup by transactionId OR groupId OR by (email|tag) +
+  //    time range. Parameter precedence per Dengage docs:
+  //       groupId > transactionId > email > tag (others ignored when a
+  //       higher-precedence filter is set).
+  //    email takes up to 5 addresses (comma-separated), same for tag.
+  //    Max time window is 7 days.
   {
     id: "transactional-email-report",
     name: "Transactional Email Report",
     description:
-      "Get the list of transactional emails sent in a time window, with delivery, open, click and bounce data per message.",
+      "Look up transactional email delivery / open / click / bounce data. Filter by transactionId, groupId, recipient email (up to 5), or tag (up to 5) combined with a time window.",
     category: "reports",
     tags: ["email", "transactional", "analytics"],
     docsUrl: "https://dev.dengage.com/reference/gettransactionalemailreport",
@@ -578,48 +580,127 @@ export const endpoints: DengageEndpoint[] = [
     form: {
       fields: [
         {
+          name: "transactionId",
+          label: "Transaction ID (single-email lookup)",
+          type: "text",
+          placeholder: "UUID returned by a SendTransactionalEmail call",
+          help: "When set, all other filters are ignored. Returns the full event trail for one send.",
+        },
+        {
+          name: "groupId",
+          label: "Group ID (batch lookup)",
+          type: "text",
+          placeholder: "UUID returned alongside each send",
+          help: "When set, all other filters are ignored. Returns every message in the group.",
+        },
+        {
+          name: "email",
+          label: "Recipient email(s)",
+          type: "text",
+          placeholder: "a@x.com, b@y.com",
+          help: "Comma-separated, up to 5. Requires BeginTime and EndTime when used.",
+        },
+        {
+          name: "tag",
+          label: "Tag(s)",
+          type: "text",
+          placeholder: "tag1, tag2",
+          help: "Comma-separated, up to 5. Mutually exclusive with email - email wins if both are set.",
+        },
+        {
           name: "BeginTime",
           label: "Begin time",
           type: "text",
-          required: true,
           placeholder: "YYYY-MM-DD HH:mm",
-          help: "Start of the reporting window. Dengage DATETIME format, UTC (e.g. 2026-04-14 00:00).",
+          help: "UTC. Required with email or tag filter; ignored when transactionId or groupId is set.",
         },
         {
           name: "EndTime",
           label: "End time",
           type: "text",
-          required: true,
           placeholder: "YYYY-MM-DD HH:mm",
-          help: "End of the reporting window. Dengage DATETIME format, UTC.",
+          help: "UTC. Max 7-day window between BeginTime and EndTime.",
         },
       ],
     },
     scenarios: [
       {
-        id: "last-24h",
-        name: "Last 24 hours",
-        values: { BeginTime: dengageDateTimeDaysAgo(1), EndTime: dengageDateTimeNow() },
+        id: "by-email-24h",
+        name: "Sends to demo recipient (last 24h)",
+        description: "Filter to your default demo inbox over the last 24 hours.",
+        values: {
+          transactionId: "",
+          groupId: "",
+          email: defaultRecipient(),
+          tag: "",
+          BeginTime: dengageDateTimeDaysAgo(1),
+          EndTime: dengageDateTimeNow(),
+        },
       },
       {
-        id: "last-7d",
-        name: "Last 7 days",
-        values: { BeginTime: dengageDateTimeDaysAgo(7), EndTime: dengageDateTimeNow() },
+        id: "by-email-7d",
+        name: "Sends to demo recipient (last 7 days)",
+        description: "Max-width window filtered to one inbox.",
+        values: {
+          transactionId: "",
+          groupId: "",
+          email: defaultRecipient(),
+          tag: "",
+          BeginTime: dengageDateTimeDaysAgo(7),
+          EndTime: dengageDateTimeNow(),
+        },
       },
       {
-        id: "last-30d",
-        name: "Last 30 days",
-        values: { BeginTime: dengageDateTimeDaysAgo(30), EndTime: dengageDateTimeNow() },
+        id: "by-transaction-id",
+        name: "Lookup by transaction ID",
+        description: "Paste a transactionId returned by SendTransactionalEmail.",
+        values: {
+          transactionId: "PASTE_TRANSACTION_ID_HERE",
+          groupId: "",
+          email: "",
+          tag: "",
+          BeginTime: "",
+          EndTime: "",
+        },
+      },
+      {
+        id: "by-group-id",
+        name: "Lookup by group ID",
+        description: "Paste a groupId returned by SendTransactionalEmail (or the bulk send).",
+        values: {
+          transactionId: "",
+          groupId: "PASTE_GROUP_ID_HERE",
+          email: "",
+          tag: "",
+          BeginTime: "",
+          EndTime: "",
+        },
+      },
+      {
+        id: "time-range-only-24h",
+        name: "Time range only (last 24h)",
+        description: "No filter - returns whatever the account surfaces for the window.",
+        values: {
+          transactionId: "",
+          groupId: "",
+          email: "",
+          tag: "",
+          BeginTime: dengageDateTimeDaysAgo(1),
+          EndTime: dengageDateTimeNow(),
+        },
       },
     ],
     defaultPayload: () => ({
+      email: defaultRecipient(),
       BeginTime: dengageDateTimeDaysAgo(1),
       EndTime: dengageDateTimeNow(),
     }),
     notes: [
-      "BeginTime and EndTime are sent as query-string parameters on this GET request.",
-      "Dengage's DATETIME format is 'YYYY-MM-DD HH:mm' UTC - not ISO 8601.",
-      "Scope note: this report reflects whatever sends the REST API surfaces for your authenticated account. If a send is visible in the Dengage admin UI but not here, raise it with Dengage support - the portal only calls documented REST endpoints and doesn't reverse-engineer admin-UI APIs.",
+      "Filter precedence: groupId > transactionId > email > tag. Setting a higher-precedence filter makes the lower ones ignored.",
+      "email and tag are mutually exclusive - if both are set, email is used and tag is ignored.",
+      "When filtering by email or tag, BeginTime and EndTime are required. Max window is 7 days.",
+      "Dengage's DATETIME format is 'YYYY-MM-DD HH:mm' UTC - not ISO 8601. The T separator and Z suffix will be rejected.",
+      "All parameters go on the query string of this GET request - see the full URL in Developer view.",
     ],
   },
 ];
