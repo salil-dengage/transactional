@@ -6,6 +6,18 @@ function substitute(str: string, vars: Record<string, string>): string {
   return str.replace(/\{\{\s*(\w+)\s*\}\}/g, (_, name) => vars[name] ?? `{{${name}}}`);
 }
 
+function pick(body: unknown, path: string): string | undefined {
+  if (!body || typeof body !== "object") return undefined;
+  const parts = path.split(".");
+  let cur: unknown = body;
+  for (const p of parts) {
+    if (cur && typeof cur === "object" && p in (cur as Record<string, unknown>)) {
+      cur = (cur as Record<string, unknown>)[p];
+    } else return undefined;
+  }
+  return typeof cur === "string" ? cur : undefined;
+}
+
 export default function EmailPreview({
   values,
   sendResult,
@@ -30,16 +42,65 @@ export default function EmailPreview({
     : "(no subject)";
   const resolvedPreheader = preheader ? substitute(preheader, params) : undefined;
 
+  // Dengage returns HTTP 200 with {code:0, message:"Successful", data:{...}} on
+  // success. Pull the useful IDs out so the rep can demo tracking.
+  const dengageCode = sendResult && typeof sendResult.responseBody === "object" && sendResult.responseBody
+    ? (sendResult.responseBody as Record<string, unknown>).code
+    : undefined;
+  const dengageMessage = sendResult && typeof sendResult.responseBody === "object" && sendResult.responseBody
+    ? (sendResult.responseBody as Record<string, unknown>).message
+    : undefined;
+  const trackingId = pick(sendResult?.responseBody, "data.to.trackingId");
+  const groupId = pick(sendResult?.responseBody, "data.groupId");
+  const transactionId = pick(sendResult?.responseBody, "transactionId");
+  const dengageOk = sendResult?.ok && dengageCode === 0;
+
   return (
     <div>
       {sendResult ? (
-        <div
-          className={`status ${sendResult.ok ? "status-ok" : "status-err"}`}
-          style={{ marginBottom: 14, fontSize: 13 }}
-        >
-          {sendResult.ok
-            ? `Email dispatched to ${to}`
-            : `Send failed (HTTP ${sendResult.status}) - see Developer view`}
+        <div style={{ marginBottom: 14 }}>
+          <div
+            className={`status ${dengageOk ? "status-ok" : "status-err"}`}
+            style={{ fontSize: 13, marginBottom: dengageOk ? 10 : 0 }}
+          >
+            {dengageOk
+              ? `Email dispatched to ${to}`
+              : `Send failed (HTTP ${sendResult.status}${typeof dengageCode === "number" ? `, code ${dengageCode}` : ""})${typeof dengageMessage === "string" ? ` - ${dengageMessage}` : " - see Developer view"}`}
+          </div>
+          {dengageOk && (trackingId || groupId || transactionId) ? (
+            <div
+              style={{
+                background: "var(--panel-2)",
+                border: "1px solid var(--border)",
+                borderRadius: 8,
+                padding: "10px 14px",
+                fontSize: 12,
+                display: "grid",
+                gridTemplateColumns: "max-content 1fr",
+                columnGap: 14,
+                rowGap: 4,
+              }}
+            >
+              {trackingId ? (
+                <>
+                  <div className="muted">Tracking ID</div>
+                  <div style={{ fontFamily: "var(--mono)" }}>{trackingId}</div>
+                </>
+              ) : null}
+              {groupId ? (
+                <>
+                  <div className="muted">Group ID</div>
+                  <div style={{ fontFamily: "var(--mono)" }}>{groupId}</div>
+                </>
+              ) : null}
+              {transactionId ? (
+                <>
+                  <div className="muted">Transaction ID</div>
+                  <div style={{ fontFamily: "var(--mono)" }}>{transactionId}</div>
+                </>
+              ) : null}
+            </div>
+          ) : null}
         </div>
       ) : null}
 
