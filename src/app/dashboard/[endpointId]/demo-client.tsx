@@ -112,11 +112,18 @@ export default function DemoClient({ endpoint }: { endpoint: EndpointProps }) {
   }
 
   function curl() {
+    // Prefer the ACTUAL body that was sent to Dengage (post-transform) when a
+    // run has happened, so 'Copy as curl' works outside the portal too. Falls
+    // back to the raw editor content before the first run.
     let body: string;
-    try {
-      body = JSON.stringify(JSON.parse(rawJson));
-    } catch {
-      body = rawJson;
+    if (result && result.requestBody !== undefined && result.requestBody !== null) {
+      body = JSON.stringify(result.requestBody);
+    } else {
+      try {
+        body = JSON.stringify(JSON.parse(rawJson));
+      } catch {
+        body = rawJson;
+      }
     }
     // Prefer the URL that was actually sent (with query string) once we have one.
     const url = result?.requestUrl || endpoint.fullUrl;
@@ -380,6 +387,20 @@ function DeveloperView({
         {result ? (
           <>
             <div className="code">{JSON.stringify(result.responseBody, null, 2)}</div>
+            {result.requestBody !== null && result.requestBody !== undefined ? (
+              <details style={{ marginTop: 12 }}>
+                <summary className="muted" style={{ cursor: "pointer" }}>
+                  Request body actually sent to Dengage
+                </summary>
+                <div className="muted" style={{ fontSize: 12, margin: "6px 0" }}>
+                  Shown post-transform (e.g. a flat form is wrapped into the API&apos;s
+                  nested body). &quot;Copy as curl&quot; emits exactly this payload.
+                </div>
+                <div className="code" style={{ marginTop: 4 }}>
+                  {JSON.stringify(result.requestBody, null, 2)}
+                </div>
+              </details>
+            ) : null}
             <details style={{ marginTop: 12 }}>
               <summary className="muted" style={{ cursor: "pointer" }}>Response headers</summary>
               <div className="code" style={{ marginTop: 8 }}>
